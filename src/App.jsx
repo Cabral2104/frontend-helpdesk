@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { MainLayout } from './layouts/MainLayout';
 import { Tickets } from './pages/Tickets'; // 1. Importar pantalla
+import { Cctv } from './pages/Cctv';
 
 // Dashboard temporal (Lo haremos real más adelante)
 const Dashboard = () => (
@@ -25,6 +26,7 @@ function App() {
           <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/tickets" element={<Tickets />} /> {/* 2. Agregar Ruta */}
+              <Route path="/cctv" element={<Cctv />} /> {/* 3. Agregar Ruta */}
           </Route>
           
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
