@@ -7,31 +7,36 @@ export const Tickets = () => {
     const { user } = useAuth();
     const isAdmin = user?.rol === 'Administrador';
 
-    // Estados Globales de la Pantalla
+    // Estados Globales
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Estados para CREAR Ticket
+    // Estados de Paginación y Ordenamiento
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [sortOrder, setSortOrder] = useState('desc'); 
+    
+    // Estados de Modales
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [createFormData, setCreateFormData] = useState({ titulo: '', descripcion: '', prioridad: 'Media', categoria_incidencia_id: 1 });
 
-    // Estados para EDITAR Ticket
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editFormData, setEditFormData] = useState({ id: null, descripcion_falla: '' });
 
-    // Estados para VER DETALLES del Ticket
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [selectedTicket, setSelectedTicket] = useState(null);
+    const [adminUpdateData, setAdminUpdateData] = useState({ estatus: '', comentario_cambio: '' });
 
     // ================= FUNCIONES API ================= //
 
     const fetchTickets = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/tickets');
+            const response = await api.get(`/tickets?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}`);
             setTickets(response.data.data || []);
+            setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
             console.error("Error al cargar los tickets:", error);
         } finally {
@@ -41,9 +46,8 @@ export const Tickets = () => {
 
     useEffect(() => {
         fetchTickets();
-    }, []);
+    }, [currentPage, sortOrder]);
 
-    // 1. Crear
     const handleCreateSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
@@ -51,6 +55,7 @@ export const Tickets = () => {
             await api.post('/tickets', createFormData);
             setIsCreateModalOpen(false);
             setCreateFormData({ titulo: '', descripcion: '', prioridad: 'Media', categoria_incidencia_id: 1 });
+            setCurrentPage(1); 
             fetchTickets(); 
         } catch (error) {
             alert(error.response?.data?.message || "Error al guardar.");
@@ -59,7 +64,6 @@ export const Tickets = () => {
         }
     };
 
-    // 2. Editar
     const handleEditClick = (ticket) => {
         setEditFormData({ id: ticket.id, descripcion_falla: ticket.descripcion_falla });
         setIsEditModalOpen(true);
@@ -79,15 +83,10 @@ export const Tickets = () => {
         }
     };
 
-   // Estados para la Gestión del Admin en la Modal de Detalles
-    const [adminUpdateData, setAdminUpdateData] = useState({ estatus: '', comentario_cambio: '' });
-
-    // 3. Ver Detalles (Abre el modal con historial)
     const handleViewClick = async (ticketId) => {
         try {
             const response = await api.get(`/tickets/${ticketId}`);
             setSelectedTicket(response.data.data);
-            // Pre-cargamos el estatus actual en el selector del admin
             setAdminUpdateData({ estatus: response.data.data.estatus, comentario_cambio: '' });
             setIsViewModalOpen(true);
         } catch (error) {
@@ -95,38 +94,29 @@ export const Tickets = () => {
         }
     };
 
-    // NUEVO: Función para que el Admin cambie el estatus y agregue comentarios
+    const handleQuickResolve = async (ticketId) => {
+        if (!window.confirm('¿Estás seguro de marcar este ticket como Resuelto?')) return;
+        try {
+            await api.put(`/tickets/${ticketId}`, { estatus: 'Resuelto', comentario_cambio: 'Cierre rápido desde el panel principal.' });
+            fetchTickets();
+        } catch (error) {
+            alert("Ocurrió un error al intentar cerrar el ticket.");
+        }
+    };
+
     const handleAdminUpdateSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
             await api.put(`/tickets/${selectedTicket.id}`, adminUpdateData);
-            
-            // Recargamos el ticket para ver el nuevo estatus y el historial fresco
             const response = await api.get(`/tickets/${selectedTicket.id}`);
             setSelectedTicket(response.data.data);
             setAdminUpdateData({ estatus: response.data.data.estatus, comentario_cambio: '' });
-            
-            // Recargamos la tabla de fondo
             fetchTickets();
         } catch (error) {
             alert("Error al actualizar el estatus del ticket.");
         } finally {
             setIsSubmitting(false);
-        }
-    };
-
-    // 4. Cierre Rápido (Admin)
-    const handleQuickResolve = async (ticketId) => {
-        if (!window.confirm('¿Estás seguro de marcar este ticket como Resuelto?')) return;
-        try {
-            await api.put(`/tickets/${ticketId}`, { 
-                estatus: 'Resuelto',
-                comentario_cambio: 'Cierre rápido desde el panel principal.' 
-            });
-            fetchTickets();
-        } catch (error) {
-            alert("Ocurrió un error al intentar cerrar el ticket.");
         }
     };
 
@@ -148,7 +138,6 @@ export const Tickets = () => {
 
     return (
         <div className="space-y-6 relative">
-            {/* Cabecera */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -165,16 +154,26 @@ export const Tickets = () => {
                 )}
             </div>
 
-            {/* Tabla */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                    <div className="relative w-full max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input 
-                            type="text" placeholder="Buscar ticket..." 
-                            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                            value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                {/* Barra de herramientas: Búsqueda, Filtro y Refresh */}
+                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
+                        <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input 
+                                type="text" placeholder="Buscar en esta página..." 
+                                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <select 
+                            className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={sortOrder}
+                            onChange={(e) => setSortOrder(e.target.value)}
+                        >
+                            <option value="desc">Más recientes primero</option>
+                            <option value="asc">Más antiguos primero</option>
+                        </select>
                     </div>
                     <button onClick={fetchTickets} className="p-2 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                         <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
@@ -182,10 +181,11 @@ export const Tickets = () => {
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-150">
+                    <table className="w-full text-left border-collapse min-w-175">
                         <thead>
                             <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                                 <th className="p-4 font-semibold">ID</th>
+                                <th className="p-4 font-semibold">Fecha</th>
                                 <th className="p-4 font-semibold">Asunto</th>
                                 <th className="p-4 font-semibold">Prioridad</th>
                                 <th className="p-4 font-semibold">Estatus</th>
@@ -195,17 +195,20 @@ export const Tickets = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">Cargando...</td></tr>
+                                <tr><td colSpan="7" className="p-8 text-center text-slate-500">Cargando...</td></tr>
                             ) : filteredTickets.length === 0 ? (
-                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">No se encontraron tickets.</td></tr>
+                                <tr><td colSpan="7" className="p-8 text-center text-slate-500">No se encontraron tickets en esta página.</td></tr>
                             ) : (
                                 filteredTickets.map((ticket) => (
                                     <tr key={ticket.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="p-4 text-sm font-medium text-slate-900 dark:text-white">#{ticket.id}</td>
-                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium truncate max-w-50">{ticket.descripcion_falla}</td>
+                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300">
+                                            {new Date(ticket.date_created).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                        </td>
+                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium truncate max-w-37.5" title={ticket.descripcion_falla}>{ticket.descripcion_falla}</td>
                                         <td className="p-4 text-sm text-slate-600 dark:text-slate-300">{ticket.prioridad}</td>
                                         <td className="p-4">{getStatusBadge(ticket.estatus)}</td>
-                                        <td className="p-4 text-xs text-slate-500 dark:text-slate-400 italic truncate max-w-50" title={ticket.historial?.[0]?.comentario_cambio || 'Sin comentarios'}>
+                                        <td className="p-4 text-xs text-slate-500 dark:text-slate-400 italic truncate max-w-37.5" title={ticket.historial?.[0]?.comentario_cambio || 'Sin comentarios'}>
                                             {ticket.historial?.[0]?.comentario_cambio || 'Sin comentarios'}
                                         </td>
                                         <td className="p-4">
@@ -231,17 +234,29 @@ export const Tickets = () => {
                         </tbody>
                     </table>
                 </div>
+                
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                        Anterior
+                    </button>
+                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                        Página {currentPage} de {totalPages}
+                    </span>
+                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                        Siguiente
+                    </button>
+                </div>
             </div>
 
             {/* MODAL 1: Crear Ticket */}
             {isCreateModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-full">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Crear Nuevo Ticket</h3>
                             <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
                         </div>
-                        <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
+                        <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 overflow-y-auto">
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Asunto breve</label>
                                 <input required type="text" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={createFormData.titulo} onChange={(e) => setCreateFormData({...createFormData, titulo: e.target.value})} />
@@ -265,15 +280,15 @@ export const Tickets = () => {
                 </div>
             )}
 
-            {/* MODAL 2: Editar Ticket (Solo Usuarios) */}
+            {/* MODAL 2: Editar Ticket */}
             {isEditModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-full">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Corregir Reporte #{editFormData.id}</h3>
                             <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
                         </div>
-                        <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+                        <form onSubmit={handleEditSubmit} className="p-6 space-y-4 overflow-y-auto">
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Descripción del problema</label>
                                 <textarea required rows="5" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-amber-500 outline-none resize-none" value={editFormData.descripcion_falla} onChange={(e) => setEditFormData({...editFormData, descripcion_falla: e.target.value})}></textarea>
@@ -287,20 +302,19 @@ export const Tickets = () => {
                 </div>
             )}
 
-            {/* MODAL 3: Ver Detalles e Historial */}
+            {/* MODAL 3: Ver Detalles */}
             {isViewModalOpen && selectedTicket && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Ticket {selectedTicket.folio}</h3>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Ticket #{selectedTicket.id}</h3>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">Reportado por: {selectedTicket.usuario_reporta?.nombre_completo || 'Desconocido'}</p>
                             </div>
                             <button onClick={() => setIsViewModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
                         </div>
                         
                         <div className="p-6 overflow-y-auto space-y-6">
-                            {/* Info Principal */}
                             <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
                                 <div>
                                     <p className="text-xs font-semibold text-slate-500 uppercase">Estatus</p>
@@ -316,20 +330,13 @@ export const Tickets = () => {
                                 </div>
                             </div>
 
-                            {/* Panel de Control Exclusivo para Administrador */}
                             {isAdmin && (
                                 <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 rounded-xl p-4 mt-2">
-                                    <h4 className="text-sm font-bold text-blue-900 dark:text-blue-400 mb-3">
-                                        Gestión de Ticket
-                                    </h4>
+                                    <h4 className="text-sm font-bold text-blue-900 dark:text-blue-400 mb-3">Gestión de Ticket</h4>
                                     <form onSubmit={handleAdminUpdateSubmit} className="space-y-3">
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Cambiar Estatus</label>
-                                            <select 
-                                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                                value={adminUpdateData.estatus}
-                                                onChange={(e) => setAdminUpdateData({...adminUpdateData, estatus: e.target.value})}
-                                            >
+                                            <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" value={adminUpdateData.estatus} onChange={(e) => setAdminUpdateData({...adminUpdateData, estatus: e.target.value})}>
                                                 <option value="Abierto">Abierto</option>
                                                 <option value="En_Progreso">En Progreso</option>
                                                 <option value="Esperando_Piezas">Esperando Piezas</option>
@@ -339,29 +346,15 @@ export const Tickets = () => {
                                         </div>
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Comentario (Opcional)</label>
-                                            <textarea 
-                                                rows="2"
-                                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm outline-none resize-none focus:ring-2 focus:ring-blue-500"
-                                                placeholder="Justifica el cambio de estatus o da retroalimentación al usuario..."
-                                                value={adminUpdateData.comentario_cambio}
-                                                onChange={(e) => setAdminUpdateData({...adminUpdateData, comentario_cambio: e.target.value})}
-                                            ></textarea>
+                                            <textarea rows="2" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm outline-none resize-none focus:ring-2 focus:ring-blue-500" placeholder="Justifica el cambio de estatus o da retroalimentación al usuario..." value={adminUpdateData.comentario_cambio} onChange={(e) => setAdminUpdateData({...adminUpdateData, comentario_cambio: e.target.value})}></textarea>
                                         </div>
                                         <div className="flex justify-end pt-2">
-                                            <button 
-                                                type="submit" 
-                                                disabled={isSubmitting || adminUpdateData.estatus === selectedTicket.estatus}
-                                                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
-                                            >
-                                                <Save size={16} />
-                                                {isSubmitting ? 'Actualizando...' : 'Actualizar Ticket'}
-                                            </button>
+                                            <button type="submit" disabled={isSubmitting || adminUpdateData.estatus === selectedTicket.estatus} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"><Save size={16} />{isSubmitting ? 'Actualizando...' : 'Actualizar Ticket'}</button>
                                         </div>
                                     </form>
                                 </div>
                             )}
 
-                            {/* Línea de Tiempo (Historial) */}
                             <div>
                                 <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4 border-b border-slate-200 dark:border-slate-800 pb-2">
                                     <Clock size={16} /> Historial de Actividad
@@ -385,7 +378,6 @@ export const Tickets = () => {
                     </div>
                 </div>
             )}
-
         </div>
     );
 };

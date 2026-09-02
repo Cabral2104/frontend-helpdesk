@@ -11,9 +11,10 @@ export const Cctv = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Estados de Paginación
+    // Paginación y Ordenamiento
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [sortOrder, setSortOrder] = useState('desc');
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +31,7 @@ export const Cctv = () => {
     const fetchCamaras = async () => {
         setLoading(true);
         try {
-            const response = await api.get(`/cctv?page=${currentPage}`);
+            const response = await api.get(`/cctv?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}`);
             setCamaras(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
@@ -40,10 +41,9 @@ export const Cctv = () => {
         }
     };
 
-    // Escucha los cambios en currentPage para volver a hacer la petición
     useEffect(() => {
         fetchCamaras();
-    }, [currentPage]);
+    }, [currentPage, sortOrder]);
 
     const openCreateModal = () => {
         setEditMode(false);
@@ -65,7 +65,6 @@ export const Cctv = () => {
                 await api.put(`/cctv/${formData.id}`, formData);
             } else {
                 await api.post('/cctv', formData);
-                // Si es un registro nuevo, opcionalmente podrías forzar ir a la página 1
                 setCurrentPage(1);
             }
             setIsModalOpen(false);
@@ -120,14 +119,24 @@ export const Cctv = () => {
             </div>
 
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                    <div className="relative w-full max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input 
-                            type="text" placeholder="Buscar en esta página..." 
-                            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                            value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
+                        <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input 
+                                type="text" placeholder="Buscar en esta página..." 
+                                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <select 
+                            className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={sortOrder}
+                            onChange={(e) => setSortOrder(e.target.value)}
+                        >
+                            <option value="desc">Más recientes primero</option>
+                            <option value="asc">Más antiguos primero</option>
+                        </select>
                     </div>
                     <button onClick={fetchCamaras} className="p-2 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                         <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
@@ -135,10 +144,11 @@ export const Cctv = () => {
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-150">
+                    <table className="w-full text-left border-collapse min-w-175">
                         <thead>
                             <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                                 <th className="p-4 font-semibold">Cámara</th>
+                                <th className="p-4 font-semibold">Fecha Registro</th>
                                 <th className="p-4 font-semibold">Ubicación</th>
                                 <th className="p-4 font-semibold">Estatus Red</th>
                                 {isAdmin && <th className="p-4 font-semibold text-right">Acciones</th>}
@@ -146,13 +156,16 @@ export const Cctv = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan={isAdmin ? "4" : "3"} className="p-8 text-center text-slate-500">Cargando infraestructura...</td></tr>
+                                <tr><td colSpan={isAdmin ? "5" : "4"} className="p-8 text-center text-slate-500">Cargando infraestructura...</td></tr>
                             ) : filteredCamaras.length === 0 ? (
-                                <tr><td colSpan={isAdmin ? "4" : "3"} className="p-8 text-center text-slate-500">No hay cámaras en esta página.</td></tr>
+                                <tr><td colSpan={isAdmin ? "5" : "4"} className="p-8 text-center text-slate-500">No hay cámaras en esta página.</td></tr>
                             ) : (
                                 filteredCamaras.map((camara) => (
                                     <tr key={camara.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="p-4 text-sm font-bold text-slate-900 dark:text-white">{camara.nombre_camara}</td>
+                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300">
+                                            {new Date(camara.date_created).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                        </td>
                                         <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium">{camara.ubicacion}</td>
                                         <td className="p-4">{getStatusBadge(camara.estatus_red)}</td>
                                         {isAdmin && (
@@ -174,23 +187,14 @@ export const Cctv = () => {
                     </table>
                 </div>
 
-                {/* Controles de Paginación */}
                 <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                    <button 
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                        className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
+                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                         Anterior
                     </button>
                     <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
                         Página {currentPage} de {totalPages}
                     </span>
-                    <button 
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages}
-                        className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
+                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                         Siguiente
                     </button>
                 </div>
@@ -208,7 +212,6 @@ export const Cctv = () => {
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
-                            
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Nombre / Identificador</label>
                                 <input required type="text" placeholder="Ej. CAM-EXT-01" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.nombre_camara} onChange={(e) => setFormData({...formData, nombre_camara: e.target.value})} />
