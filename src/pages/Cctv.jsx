@@ -130,6 +130,14 @@ export const Cctv = () => {
                                 value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
+                        <select 
+                            className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={sortOrder}
+                            onChange={(e) => setSortOrder(e.target.value)}
+                        >
+                            <option value="desc">Más recientes primero</option>
+                            <option value="asc">Más antiguos primero</option>
+                        </select>
                     </div>
                     <button onClick={fetchCamaras} className="p-2 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                         <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
@@ -185,6 +193,29 @@ export const Cctv = () => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* NUEVO: Controles de Paginación Visuales */}
+                {!loading && camaras.length > 0 && (
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                            disabled={currentPage === 1} 
+                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
+                        >
+                            Anterior
+                        </button>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            Página {currentPage} de {totalPages}
+                        </span>
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                            disabled={currentPage === totalPages} 
+                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
+                        >
+                            Siguiente
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Modal de Registro/Edición */}

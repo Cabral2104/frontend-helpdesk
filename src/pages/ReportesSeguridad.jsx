@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { ShieldAlert, Search, RefreshCw, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { ShieldAlert, Search, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const ReportesSeguridad = () => {
@@ -11,12 +11,20 @@ export const ReportesSeguridad = () => {
     const [reportes, setReportes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    
+    // Estados de Paginación y Ordenamiento
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [sortOrder, setSortOrder] = useState('desc');
 
     const fetchReportes = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/reportes-seguridad');
+            // Petición actualizada para incluir la página y el orden
+            const response = await api.get(`/reportes-seguridad?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}`);
             setReportes(response.data.data || []);
+            // Guardamos el total de páginas
+            setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
             console.error("Error al cargar reportes:", error);
         } finally {
@@ -24,9 +32,10 @@ export const ReportesSeguridad = () => {
         }
     };
 
+    // Actualizado para escuchar cambios en currentPage y sortOrder
     useEffect(() => {
         fetchReportes();
-    }, []);
+    }, [currentPage, sortOrder]);
 
     // Función para actualizar el estatus en tiempo real
     const handleStatusChange = async (id, nuevoEstatus) => {
@@ -62,7 +71,7 @@ export const ReportesSeguridad = () => {
                         <ShieldAlert size={28} className="text-red-600" />
                         Bitácora de Seguridad
                     </h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                         Historial de incidentes y novedades reportadas desde caseta.
                     </p>
                 </div>
@@ -70,21 +79,34 @@ export const ReportesSeguridad = () => {
 
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50">
-                    <div className="relative w-full sm:w-72">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input 
-                            type="text" placeholder="Buscar por tipo o descripción..." 
-                            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
-                            value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
+                        <div className="relative w-full sm:w-72">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input 
+                                type="text" placeholder="Buscar por tipo o descripción..." 
+                                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        
+                        {/* Selector de Ordenamiento */}
+                        <select 
+                            className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                            value={sortOrder}
+                            onChange={(e) => setSortOrder(e.target.value)}
+                        >
+                            <option value="desc">Más recientes primero</option>
+                            <option value="asc">Más antiguos primero</option>
+                        </select>
                     </div>
+
                     <button onClick={fetchReportes} className="p-2 text-slate-500 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Actualizar datos">
                         <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
                     </button>
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-225">
+                    <table className="w-full text-left border-collapse min-w-200">
                         <thead>
                             <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                                 <th className="p-4 font-semibold">Fecha / Hora</th>
@@ -137,6 +159,29 @@ export const ReportesSeguridad = () => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Controles de Paginación */}
+                {!loading && reportes.length > 0 && (
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                            disabled={currentPage === 1} 
+                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
+                        >
+                            Anterior
+                        </button>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            Página {currentPage} de {totalPages}
+                        </span>
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                            disabled={currentPage === totalPages} 
+                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
+                        >
+                            Siguiente
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

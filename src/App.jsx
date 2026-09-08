@@ -9,6 +9,7 @@ import { Cctv } from './pages/Cctv';
 import { Dashboard } from './pages/Dashboard'; // 2. Importar pantalla
 import { Caseta } from './pages/Caseta'; // 3. Importar pantalla
 import { ReportesSeguridad } from './pages/ReportesSeguridad'; // 4. Importar pantalla
+import { Inventario } from './pages/Inventario'; // 5. Importar pantalla
 
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
               <Route path="/cctv" element={<Cctv />} /> {/* 3. Agregar Ruta */}
               <Route path="/caseta" element={<Caseta />} /> {/* 4. Agregar Ruta */}
               <Route path="/reportes-seguridad" element={<ReportesSeguridad />} /> {/* 5. Agregar Ruta */}
+              <Route path="/inventario" element={<Inventario />} /> {/* 6. Agregar Ruta */}
           </Route>
           
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
