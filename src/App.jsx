@@ -8,6 +8,7 @@ import { Tickets } from './pages/Tickets'; // 1. Importar pantalla
 import { Cctv } from './pages/Cctv';
 import { Dashboard } from './pages/Dashboard'; // 2. Importar pantalla
 import { Caseta } from './pages/Caseta'; // 3. Importar pantalla
+import { ReportesSeguridad } from './pages/ReportesSeguridad'; // 4. Importar pantalla
 
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
               <Route path="/tickets" element={<Tickets />} /> {/* 2. Agregar Ruta */}
               <Route path="/cctv" element={<Cctv />} /> {/* 3. Agregar Ruta */}
               <Route path="/caseta" element={<Caseta />} /> {/* 4. Agregar Ruta */}
+              <Route path="/reportes-seguridad" element={<ReportesSeguridad />} /> {/* 5. Agregar Ruta */}
           </Route>
           
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

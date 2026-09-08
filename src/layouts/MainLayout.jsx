@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-// Importamos los íconos de Menú y X para dispositivos móviles
-import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, Menu, X } from 'lucide-react';
+// NUEVO: Importamos MonitorPlay y ShieldAlert al final de la lista
+import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, Menu, X, MonitorPlay, ShieldAlert } from 'lucide-react';
 
 export const MainLayout = () => {
     const { user, logout } = useAuth();
@@ -91,6 +91,19 @@ export const MainLayout = () => {
                     <Link to="/cctv" className={getLinkStyles('/cctv')}>
                         <Cctv size={18} />
                         Cámaras CCTV
+                    </Link>
+
+                    {/* NUEVA SECCIÓN: Seguridad y Monitoreo */}
+                    <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Seguridad</p>
+                    <Link to="/caseta" className={getLinkStyles('/caseta')}>
+                        <MonitorPlay size={18} />
+                        Monitor Caseta
+                    </Link>
+                    
+                    {/* Botón de Bitácora (Visible para todos, o podrías envolverlo en un {user?.rol === 'Administrador' && (...)} si quieres ocultarlo a los guardias) */}
+                    <Link to="/reportes-seguridad" className={getLinkStyles('/reportes-seguridad')}>
+                        <ShieldAlert size={18} />
+                        Bitácora de Seguridad
                     </Link>
                 </nav>
 
