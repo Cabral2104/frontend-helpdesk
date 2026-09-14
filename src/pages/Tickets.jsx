@@ -11,6 +11,7 @@ export const Tickets = () => {
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [filterCategory, setFilterCategory] = useState('');
     
     // Estados de Paginación y Ordenamiento
     const [currentPage, setCurrentPage] = useState(1);
@@ -20,7 +21,8 @@ export const Tickets = () => {
     // Estados de Modales
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [createFormData, setCreateFormData] = useState({ titulo: '', descripcion: '', prioridad: 'Media', categoria_incidencia_id: 1 });
+    const [categorias, setCategorias] = useState([]); // NUEVO ESTADO PARA CATEGORÍAS
+    const [createFormData, setCreateFormData] = useState({ titulo: '', descripcion: '', prioridad: 'Media', categoria_id: '' });
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editFormData, setEditFormData] = useState({ id: null, descripcion_falla: '' });
@@ -47,6 +49,20 @@ export const Tickets = () => {
     useEffect(() => {
         fetchTickets();
     }, [currentPage, sortOrder]);
+
+    useEffect(() => {
+        const fetchCategorias = async () => {
+            try {
+                const response = await api.get('/categorias-incidencias');
+                if (response.data.success) {
+                    setCategorias(response.data.data);
+                }
+            } catch (error) {
+            console.error("Error al cargar las categorías:", error);
+            }
+        };
+        fetchCategorias();
+    }, []);
 
     const handleCreateSubmit = async (e) => {
         e.preventDefault();
@@ -132,9 +148,12 @@ export const Tickets = () => {
         return <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${styles[status] || defaultStyle}`}>{status || 'Abierto'}</span>;
     };
 
-    const filteredTickets = tickets.filter(ticket => 
-        ticket.descripcion_falla?.toLowerCase().includes(searchTerm.toLowerCase()) || ticket.id.toString().includes(searchTerm)
-    );
+    const filteredTickets = tickets.filter(ticket => {
+        const matchesSearch = ticket.descripcion_falla?.toLowerCase().includes(searchTerm.toLowerCase()) || ticket.id.toString().includes(searchTerm);
+        const matchesCategory = filterCategory === '' || ticket.categoria_id?.toString() === filterCategory.toString();
+    
+        return matchesSearch && matchesCategory;
+    });
 
     return (
         <div className="space-y-6 relative">
@@ -166,6 +185,20 @@ export const Tickets = () => {
                                 value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
+
+                        {/* NUEVO FILTRO DE CATEGORÍAS */}
+                        <select 
+                            className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={filterCategory}
+                            onChange={(e) => setFilterCategory(e.target.value)}
+                        >
+                            <option value="">Todas las categorías</option>
+                            {categorias.map((cat) => (
+                                <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                            ))}
+                        </select>
+                        {/* FIN NUEVO FILTRO */}
+
                         <select 
                             className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             value={sortOrder}
@@ -187,6 +220,8 @@ export const Tickets = () => {
                                 <th className="p-4 font-semibold">ID</th>
                                 <th className="p-4 font-semibold">Fecha</th>
                                 <th className="p-4 font-semibold">Asunto</th>
+                                <th className="p-4 font-semibold">Categoría</th>
+                                {isAdmin && <th className="p-4 font-semibold">Usuario</th>}
                                 <th className="p-4 font-semibold">Prioridad</th>
                                 <th className="p-4 font-semibold">Estatus</th>
                                 <th className="p-4 font-semibold">Último Mensaje</th>
@@ -206,6 +241,14 @@ export const Tickets = () => {
                                             {new Date(ticket.date_created).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
                                         </td>
                                         <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium truncate max-w-37.5" title={ticket.descripcion_falla}>{ticket.descripcion_falla}</td>
+                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300 truncate max-w-37.5" title={ticket.categoria?.nombre}>
+                                            {ticket.categoria?.nombre || 'Sin categoría'}
+                                        </td>
+                                        {isAdmin && (
+                                            <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium truncate max-w-37.5" title={ticket.usuario_reporta?.nombre_completo}>
+                                                {ticket.usuario_reporta?.nombre_completo || 'Desconocido'}
+                                            </td>
+                                        )}
                                         <td className="p-4 text-sm text-slate-600 dark:text-slate-300">{ticket.prioridad}</td>
                                         <td className="p-4">{getStatusBadge(ticket.estatus)}</td>
                                         <td className="p-4 text-xs text-slate-500 dark:text-slate-400 italic truncate max-w-37.5" title={ticket.historial?.[0]?.comentario_cambio || 'Sin comentarios'}>
@@ -264,6 +307,22 @@ export const Tickets = () => {
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Descripción</label>
                                 <textarea required rows="4" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none" value={createFormData.descripcion} onChange={(e) => setCreateFormData({...createFormData, descripcion: e.target.value})}></textarea>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Categoría del problema</label>
+                                <select 
+                                    required
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" 
+                                    value={createFormData.categoria_id} 
+                                    onChange={(e) => setCreateFormData({...createFormData, categoria_id: e.target.value})}
+                                >
+                                    <option value="">Selecciona una categoría...</option>
+                                    {categorias.map((cat) => (
+                                        <option key={cat.id} value={cat.id}>
+                                            {cat.nombre}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Prioridad</label>

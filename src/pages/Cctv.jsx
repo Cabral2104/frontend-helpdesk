@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Plus, Search, RefreshCw, X, Save, Pencil, Trash2, Cctv as CctvIcon } from 'lucide-react';
+import { Plus, Search, RefreshCw, X, Save, Pencil, Trash2, Cctv as CctvIcon, MonitorPlay } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const Cctv = () => {
@@ -20,12 +20,18 @@ export const Cctv = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editMode, setEditMode] = useState(false);
     
+    // ESTADO CON TODOS LOS CAMPOS NUEVOS
     const [formData, setFormData] = useState({
         id: null,
         nombre_camara: '',
         ubicacion: '',
+        numero_serie: '',    // <- NUEVO
+        ip_asignada: '',
+        switch_conexion: '',
+        puerto_switch: '',
         stream_url: '',
-        estatus_red: 1
+        estatus_red: 1,
+        visible_en_caseta: 0
     });
 
     const fetchCamaras = async () => {
@@ -47,13 +53,33 @@ export const Cctv = () => {
 
     const openCreateModal = () => {
         setEditMode(false);
-        setFormData({ id: null, nombre_camara: '', ubicacion: '', stream_url: '', estatus_red: 1 });
+        // LIMPIAR TODOS LOS CAMPOS
+        setFormData({ 
+            id: null, 
+            nombre_camara: '', 
+            ubicacion: '', 
+            numero_serie: '',
+            ip_asignada: '',
+            switch_conexion: '',
+            puerto_switch: '',
+            stream_url: '', 
+            estatus_red: 1, 
+            visible_en_caseta: 0 
+        });
         setIsModalOpen(true);
     };
 
     const openEditModal = (camara) => {
         setEditMode(true);
-        setFormData({ ...camara });
+        // PROTECCIÓN CONTRA VALORES NULOS DE LA BASE DE DATOS
+        setFormData({ 
+            ...camara,
+            numero_serie: camara.numero_serie || '',
+            ip_asignada: camara.ip_asignada || '',
+            switch_conexion: camara.switch_conexion || '',
+            puerto_switch: camara.puerto_switch || '',
+            stream_url: camara.stream_url || ''
+        });
         setIsModalOpen(true);
     };
 
@@ -96,7 +122,9 @@ export const Cctv = () => {
 
     const filteredCamaras = camaras.filter(cam => 
         cam.nombre_camara?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        cam.ubicacion?.toLowerCase().includes(searchTerm.toLowerCase())
+        cam.ubicacion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cam.ip_asignada?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cam.numero_serie?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
@@ -148,26 +176,48 @@ export const Cctv = () => {
                         <thead>
                             <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                                 <th className="p-4 font-semibold">Cámara</th>
-                                <th className="p-4 font-semibold">Fecha Registro</th>
                                 <th className="p-4 font-semibold">Ubicación</th>
+                                <th className="p-4 font-semibold">Red / Switch</th>
                                 <th className="p-4 font-semibold">Estatus Red</th>
+                                <th className="p-4 font-semibold text-center">Monitor Caseta</th>
                                 {isAdmin && <th className="p-4 font-semibold text-right">Acciones</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan={isAdmin ? "5" : "4"} className="p-8 text-center text-slate-500">Cargando infraestructura...</td></tr>
+                                <tr><td colSpan={isAdmin ? "6" : "5"} className="p-8 text-center text-slate-500">Cargando infraestructura...</td></tr>
                             ) : filteredCamaras.length === 0 ? (
-                                <tr><td colSpan={isAdmin ? "5" : "4"} className="p-8 text-center text-slate-500">No hay cámaras en esta página.</td></tr>
+                                <tr><td colSpan={isAdmin ? "6" : "5"} className="p-8 text-center text-slate-500">No hay cámaras registradas.</td></tr>
                             ) : (
                                 filteredCamaras.map((camara) => (
                                     <tr key={camara.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                        <td className="p-4 text-sm font-bold text-slate-900 dark:text-white">{camara.nombre_camara}</td>
-                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300">
-                                            {new Date(camara.date_created).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                        <td className="p-4 text-sm text-slate-900 dark:text-white">
+                                            <div className="font-bold">{camara.nombre_camara}</div>
+                                            {camara.numero_serie && <div className="text-xs text-slate-500 font-normal">S/N: {camara.numero_serie}</div>}
                                         </td>
                                         <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium">{camara.ubicacion}</td>
+                                        
+                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300">
+                                            {camara.ip_asignada ? (
+                                                <div className="flex flex-col">
+                                                    <span className="font-semibold">{camara.ip_asignada}</span>
+                                                    <span className="text-xs text-slate-400">{camara.switch_conexion} - Pto. {camara.puerto_switch}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-400">-</span>
+                                            )}
+                                        </td>
+                                        
                                         <td className="p-4">{getStatusBadge(camara.estatus_red)}</td>
+                                        <td className="p-4 text-center">
+                                            {camara.visible_en_caseta === 1 ? (
+                                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                                                    <MonitorPlay size={14} /> Visible
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">-</span>
+                                            )}
+                                        </td>
                                         {isAdmin && (
                                             <td className="p-4">
                                                 <div className="flex items-center justify-end gap-2">
@@ -187,57 +237,93 @@ export const Cctv = () => {
                     </table>
                 </div>
 
-                <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                        Anterior
-                    </button>
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                        Página {currentPage} de {totalPages}
-                    </span>
-                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                        Siguiente
-                    </button>
-                </div>
+                {!loading && camaras.length > 0 && (
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                            disabled={currentPage === 1} 
+                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
+                        >
+                            Anterior
+                        </button>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            Página {currentPage} de {totalPages}
+                        </span>
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                            disabled={currentPage === totalPages} 
+                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
+                        >
+                            Siguiente
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {/* Modal de Registro/Edición */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-full">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                                 {editMode ? 'Editar Cámara' : 'Registrar Nueva Cámara'}
                             </h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Nombre / Identificador</label>
-                                <input required type="text" placeholder="Ej. CAM-EXT-01" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.nombre_camara} onChange={(e) => setFormData({...formData, nombre_camara: e.target.value})} />
+                                <input required type="text" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.nombre_camara} onChange={(e) => setFormData({...formData, nombre_camara: e.target.value})} />
                             </div>
                             
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Ubicación Física</label>
-                                <input required type="text" placeholder="Ej. Estacionamiento Norte" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.ubicacion} onChange={(e) => setFormData({...formData, ubicacion: e.target.value})} />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Ubicación Física</label>
+                                    <input required type="text" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.ubicacion} onChange={(e) => setFormData({...formData, ubicacion: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Número de Serie</label>
+                                    <input type="text" placeholder="Ej. D123456789" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.numero_serie} onChange={(e) => setFormData({...formData, numero_serie: e.target.value})} />
+                                </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Estatus de Red</label>
-                                <select 
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" 
-                                    value={formData.estatus_red} 
-                                    onChange={(e) => setFormData({...formData, estatus_red: parseInt(e.target.value)})}
-                                >
-                                    <option value={1}>Online</option>
-                                    <option value={0}>Offline</option>
-                                    <option value={2}>Mantenimiento</option>
-                                </select>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">IP Asignada</label>
+                                <input type="text" placeholder="Ej. 10.52.70.15" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.ip_asignada} onChange={(e) => setFormData({...formData, ip_asignada: e.target.value})} />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Switch de Conexión</label>
+                                    <input type="text" placeholder="Ej. SW-MDF-01" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.switch_conexion} onChange={(e) => setFormData({...formData, switch_conexion: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Puerto</label>
+                                    <input type="text" placeholder="Ej. 24" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.puerto_switch} onChange={(e) => setFormData({...formData, puerto_switch: e.target.value})} />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Estatus de Red</label>
+                                    <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.estatus_red} onChange={(e) => setFormData({...formData, estatus_red: parseInt(e.target.value)})}>
+                                        <option value={1}>Online</option>
+                                        <option value={0}>Offline</option>
+                                        <option value={2}>Mantenimiento</option>
+                                    </select>
+                                </div>
+                                <div className="flex flex-col justify-center">
+                                    <label className="flex items-center gap-2 cursor-pointer mt-5">
+                                        <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={Number(formData.visible_en_caseta) === 1} onChange={(e) => setFormData({...formData, visible_en_caseta: e.target.checked ? 1 : 0})} />
+                                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Mostrar en Caseta</span>
+                                    </label>
+                                </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">URL del Stream (Opcional)</label>
-                                <input type="text" placeholder="rtsp://..." className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.stream_url} onChange={(e) => setFormData({...formData, stream_url: e.target.value})} />
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">URL del Stream de Video (WebRTC)</label>
+                                <input type="text" placeholder="http://127.0.0.1:8889/camara_principal" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.stream_url} onChange={(e) => setFormData({...formData, stream_url: e.target.value})} />
+                                <p className="text-xs text-slate-500 mt-1">Ruta generada por el servidor MediaMTX.</p>
                             </div>
 
                             <div className="pt-4 flex gap-3 justify-end">
