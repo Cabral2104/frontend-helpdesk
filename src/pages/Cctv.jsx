@@ -20,13 +20,18 @@ export const Cctv = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editMode, setEditMode] = useState(false);
     
+    // ESTADO CON TODOS LOS CAMPOS NUEVOS
     const [formData, setFormData] = useState({
         id: null,
         nombre_camara: '',
         ubicacion: '',
+        numero_serie: '',    // <- NUEVO
+        ip_asignada: '',
+        switch_conexion: '',
+        puerto_switch: '',
         stream_url: '',
         estatus_red: 1,
-        visible_en_caseta: 0 // NUEVO CAMPO
+        visible_en_caseta: 0
     });
 
     const fetchCamaras = async () => {
@@ -48,13 +53,33 @@ export const Cctv = () => {
 
     const openCreateModal = () => {
         setEditMode(false);
-        setFormData({ id: null, nombre_camara: '', ubicacion: '', stream_url: '', estatus_red: 1, visible_en_caseta: 0 });
+        // LIMPIAR TODOS LOS CAMPOS
+        setFormData({ 
+            id: null, 
+            nombre_camara: '', 
+            ubicacion: '', 
+            numero_serie: '',
+            ip_asignada: '',
+            switch_conexion: '',
+            puerto_switch: '',
+            stream_url: '', 
+            estatus_red: 1, 
+            visible_en_caseta: 0 
+        });
         setIsModalOpen(true);
     };
 
     const openEditModal = (camara) => {
         setEditMode(true);
-        setFormData({ ...camara });
+        // PROTECCIÓN CONTRA VALORES NULOS DE LA BASE DE DATOS
+        setFormData({ 
+            ...camara,
+            numero_serie: camara.numero_serie || '',
+            ip_asignada: camara.ip_asignada || '',
+            switch_conexion: camara.switch_conexion || '',
+            puerto_switch: camara.puerto_switch || '',
+            stream_url: camara.stream_url || ''
+        });
         setIsModalOpen(true);
     };
 
@@ -97,7 +122,9 @@ export const Cctv = () => {
 
     const filteredCamaras = camaras.filter(cam => 
         cam.nombre_camara?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        cam.ubicacion?.toLowerCase().includes(searchTerm.toLowerCase())
+        cam.ubicacion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cam.ip_asignada?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cam.numero_serie?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
@@ -150,6 +177,7 @@ export const Cctv = () => {
                             <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                                 <th className="p-4 font-semibold">Cámara</th>
                                 <th className="p-4 font-semibold">Ubicación</th>
+                                <th className="p-4 font-semibold">Red / Switch</th>
                                 <th className="p-4 font-semibold">Estatus Red</th>
                                 <th className="p-4 font-semibold text-center">Monitor Caseta</th>
                                 {isAdmin && <th className="p-4 font-semibold text-right">Acciones</th>}
@@ -157,14 +185,29 @@ export const Cctv = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan={isAdmin ? "5" : "4"} className="p-8 text-center text-slate-500">Cargando infraestructura...</td></tr>
+                                <tr><td colSpan={isAdmin ? "6" : "5"} className="p-8 text-center text-slate-500">Cargando infraestructura...</td></tr>
                             ) : filteredCamaras.length === 0 ? (
-                                <tr><td colSpan={isAdmin ? "5" : "4"} className="p-8 text-center text-slate-500">No hay cámaras registradas.</td></tr>
+                                <tr><td colSpan={isAdmin ? "6" : "5"} className="p-8 text-center text-slate-500">No hay cámaras registradas.</td></tr>
                             ) : (
                                 filteredCamaras.map((camara) => (
                                     <tr key={camara.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                        <td className="p-4 text-sm font-bold text-slate-900 dark:text-white">{camara.nombre_camara}</td>
+                                        <td className="p-4 text-sm text-slate-900 dark:text-white">
+                                            <div className="font-bold">{camara.nombre_camara}</div>
+                                            {camara.numero_serie && <div className="text-xs text-slate-500 font-normal">S/N: {camara.numero_serie}</div>}
+                                        </td>
                                         <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium">{camara.ubicacion}</td>
+                                        
+                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300">
+                                            {camara.ip_asignada ? (
+                                                <div className="flex flex-col">
+                                                    <span className="font-semibold">{camara.ip_asignada}</span>
+                                                    <span className="text-xs text-slate-400">{camara.switch_conexion} - Pto. {camara.puerto_switch}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-400">-</span>
+                                            )}
+                                        </td>
+                                        
                                         <td className="p-4">{getStatusBadge(camara.estatus_red)}</td>
                                         <td className="p-4 text-center">
                                             {camara.visible_en_caseta === 1 ? (
@@ -194,7 +237,6 @@ export const Cctv = () => {
                     </table>
                 </div>
 
-                {/* NUEVO: Controles de Paginación Visuales */}
                 {!loading && camaras.length > 0 && (
                     <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
                         <button 
@@ -218,15 +260,14 @@ export const Cctv = () => {
                 )}
             </div>
 
-            {/* Modal de Registro/Edición */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-full">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                                 {editMode ? 'Editar Cámara' : 'Registrar Nueva Cámara'}
                             </h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
@@ -235,9 +276,31 @@ export const Cctv = () => {
                                 <input required type="text" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.nombre_camara} onChange={(e) => setFormData({...formData, nombre_camara: e.target.value})} />
                             </div>
                             
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Ubicación Física</label>
+                                    <input required type="text" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.ubicacion} onChange={(e) => setFormData({...formData, ubicacion: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Número de Serie</label>
+                                    <input type="text" placeholder="Ej. D123456789" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.numero_serie} onChange={(e) => setFormData({...formData, numero_serie: e.target.value})} />
+                                </div>
+                            </div>
+
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Ubicación Física</label>
-                                <input required type="text" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.ubicacion} onChange={(e) => setFormData({...formData, ubicacion: e.target.value})} />
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">IP Asignada</label>
+                                <input type="text" placeholder="Ej. 10.52.70.15" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.ip_asignada} onChange={(e) => setFormData({...formData, ip_asignada: e.target.value})} />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Switch de Conexión</label>
+                                    <input type="text" placeholder="Ej. SW-MDF-01" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.switch_conexion} onChange={(e) => setFormData({...formData, switch_conexion: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Puerto</label>
+                                    <input type="text" placeholder="Ej. 24" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.puerto_switch} onChange={(e) => setFormData({...formData, puerto_switch: e.target.value})} />
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">

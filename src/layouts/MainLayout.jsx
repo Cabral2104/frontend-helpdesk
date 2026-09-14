@@ -1,15 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-// NUEVO: Importamos MonitorPlay y ShieldAlert al final de la lista
-import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, Menu, X, MonitorPlay, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, Menu, X, MonitorPlay, ShieldAlert, Users } from 'lucide-react';
 
 export const MainLayout = () => {
     const { user, logout } = useAuth();
     const location = useLocation();
     
+    // VALIDACIONES DE PERMISOS CORRECTAS
+    const isAdmin = user?.rol === 'Administrador';
+    const isSeguridad = user?.rol === 'Seguridad';
+    
+    // TI (Admin) ve Infraestructura completa. Guardia ve Seguridad.
+    const canViewInfraestructura = isAdmin; 
+    const canViewSeguridad = isAdmin || isSeguridad;
+
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
-    // Nuevo estado para controlar el menú lateral en celulares
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     useEffect(() => {
@@ -22,12 +28,10 @@ export const MainLayout = () => {
         }
     }, [darkMode]);
 
-    // Cerramos el menú lateral automáticamente cuando el usuario hace clic en una opción en su celular
     useEffect(() => {
         setIsSidebarOpen(false);
     }, [location.pathname]);
 
-    // Estilos de los links arreglados para respetar el modo claro y oscuro
     const getLinkStyles = (path) => {
         const isActive = location.pathname === path;
         return `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -37,10 +41,17 @@ export const MainLayout = () => {
         }`;
     };
 
+    const getDepartamentoNombre = (id) => {
+        const departamentos = {
+            1: "ICT / Sistemas", 2: "Recursos Humanos", 3: "Producción", 4: "Calidad",
+            5: "Mantenimiento", 6: "Logística", 7: "Industrialización", 8: "Ingeniería",
+            9: "Compras", 10: "Gerencia", 11: "Almacén", 12: "Enfermería"
+        };
+        return departamentos[id] || user?.rol; // Muestra el rol como respaldo si no encuentra el ID
+    };
+
     return (
         <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-            
-            {/* Fondo oscuro translúcido para celulares cuando el menú está abierto */}
             {isSidebarOpen && (
                 <div 
                     className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-20 md:hidden transition-opacity"
@@ -48,10 +59,8 @@ export const MainLayout = () => {
                 />
             )}
 
-            {/* Sidebar (Ahora sí es responsive y cambia de modo claro a oscuro) */}
             <aside className={`fixed md:static inset-y-0 left-0 w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-30 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
                 
-                {/* Cabecera del Sidebar */}
                 <div className="p-6 border-b border-slate-200 dark:border-slate-800/60 flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-600/30">
@@ -62,7 +71,6 @@ export const MainLayout = () => {
                             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Helpdesk & Monitor</p>
                         </div>
                     </div>
-                    {/* Botón de cerrar (Solo visible en móviles) */}
                     <button 
                         className="md:hidden text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                         onClick={() => setIsSidebarOpen(false)}
@@ -71,7 +79,6 @@ export const MainLayout = () => {
                     </button>
                 </div>
                 
-                {/* Navegación */}
                 <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
                     <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-2">Principal</p>
                     <Link to="/dashboard" className={getLinkStyles('/dashboard')}>
@@ -83,37 +90,53 @@ export const MainLayout = () => {
                         Gestión de Tickets
                     </Link>
 
-                    <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Infraestructura</p>
-                    <Link to="/inventario" className={getLinkStyles('/inventario')}>
-                        <PcCase size={18} />
-                        Inventario
-                    </Link>
-                    <Link to="/cctv" className={getLinkStyles('/cctv')}>
-                        <Cctv size={18} />
-                        Cámaras CCTV
-                    </Link>
+                    {/* Solo el Administrador puede ver y gestionar usuarios */}
+                    {isAdmin && (
+                        <Link to="/usuarios" className={getLinkStyles('/usuarios')}>
+                            <Users size={18} />
+                            Gestión de Usuarios
+                        </Link>
+                    )}
 
-                    {/* NUEVA SECCIÓN: Seguridad y Monitoreo */}
-                    <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Seguridad</p>
-                    <Link to="/caseta" className={getLinkStyles('/caseta')}>
-                        <MonitorPlay size={18} />
-                        Monitor Caseta
-                    </Link>
-                    
-                    {/* Botón de Bitácora (Visible para todos, o podrías envolverlo en un {user?.rol === 'Administrador' && (...)} si quieres ocultarlo a los guardias) */}
-                    <Link to="/reportes-seguridad" className={getLinkStyles('/reportes-seguridad')}>
-                        <ShieldAlert size={18} />
-                        Bitácora de Seguridad
-                    </Link>
+                    {/* INFRAESTRUCTURA: Estrictamente para Administrador */}
+                    {canViewInfraestructura && (
+                        <>
+                            <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Infraestructura</p>
+                            <Link to="/inventario" className={getLinkStyles('/inventario')}>
+                                <PcCase size={18} />
+                                Inventario
+                            </Link>
+                            <Link to="/cctv" className={getLinkStyles('/cctv')}>
+                                <Cctv size={18} />
+                                Cámaras CCTV
+                            </Link>
+                        </>
+                    )}
+
+                    {/* SEGURIDAD: Para Administrador y Seguridad */}
+                    {canViewSeguridad && (
+                        <>
+                            <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Seguridad</p>
+                            <Link to="/caseta" className={getLinkStyles('/caseta')}>
+                                <MonitorPlay size={18} />
+                                Monitor Caseta
+                            </Link>
+                            <Link to="/reportes-seguridad" className={getLinkStyles('/reportes-seguridad')}>
+                                <ShieldAlert size={18} />
+                                Bitácora de Seguridad
+                            </Link>
+                        </>
+                    )}
                 </nav>
 
-                {/* Área de Usuario */}
                 <div className="p-4 border-t border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-900/50">
                     <div className="flex items-center gap-3 px-2 mb-4">
                         <UserCircle size={32} className="text-slate-500 dark:text-slate-400" />
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{user?.nombre_completo || 'Administrador'}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.numero_nomina}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                {getDepartamentoNombre(user?.departamento_id)}
+                            </p>
                         </div>
                     </div>
                     <button 
@@ -126,14 +149,9 @@ export const MainLayout = () => {
                 </div>
             </aside>
 
-            {/* Contenido Principal */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                
-                {/* Header Superior */}
                 <header className="sticky top-0 z-10 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 md:px-8 py-4 flex justify-between items-center transition-colors duration-300">
-                    
                     <div className="flex items-center gap-4">
-                        {/* Botón de Menú Hamburguesa (Solo visible en móviles) */}
                         <button 
                             className="md:hidden text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
                             onClick={() => setIsSidebarOpen(true)}
@@ -152,14 +170,11 @@ export const MainLayout = () => {
                         {darkMode ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} className="text-indigo-500" />}
                         <span className="hidden sm:inline">{darkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
                     </button>
-
                 </header>
 
-                {/* Área de la Vista */}
                 <div className="flex-1 overflow-auto p-4 md:p-8">
                     <Outlet />
                 </div>
-                
             </main>
         </div>
     );
