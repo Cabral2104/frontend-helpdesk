@@ -11,6 +11,7 @@ import { Caseta } from './pages/Caseta';
 import { ReportesSeguridad } from './pages/ReportesSeguridad'; 
 import { Inventario } from './pages/Inventario'; 
 import { Usuarios } from './pages/Usuarios';
+import { Reportes } from './pages/Reportes';
 
 // Interceptor para bloquear rutas según el rol
 const RequireRole = ({ children, allowedRoles }) => {
@@ -51,6 +52,8 @@ function App() {
                     <Usuarios />
                   </RequireRole>
               } />
+
+              <Route path="/exportar-reportes" element={<Reportes />} />
               
               {/* RUTAS BLOQUEADAS: Administrador y Seguridad */}
               <Route path="/caseta" element={

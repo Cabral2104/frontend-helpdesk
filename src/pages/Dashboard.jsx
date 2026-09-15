@@ -1,18 +1,36 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import { Activity, Ticket, CheckCircle, VideoOff, Cctv as CctvIcon } from 'lucide-react';
+import { Activity, Ticket, CheckCircle, VideoOff, Cctv as CctvIcon, ShieldAlert } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 export const Dashboard = () => {
     const { user } = useAuth();
+    
+    // Identificadores de Rol
     const isAdmin = user?.rol === 'Administrador';
+    const isSeguridad = user?.rol === 'Seguridad';
     
     const [dashboardData, setDashboardData] = useState({
         kpis: { tickets_activos: 0, tickets_resueltos: 0, camaras_offline: 0, camaras_total: 0 },
         graficas: { tickets_por_estatus: [], tickets_por_dia: [] }
     });
     const [loading, setLoading] = useState(true);
+
+    // ==========================================
+    // VARIABLES DINÁMICAS SEGÚN EL ROL
+    // ==========================================
+    const tituloActivos = isSeguridad ? 'Reportes Activos' : 'Tickets Activos';
+    const tituloResueltos = isSeguridad ? 'Reportes Resueltos' : 'Tickets Resueltos';
+    const tituloDonut = isSeguridad ? 'Distribución de Reportes por Estatus' : 'Distribución de Tickets por Estatus';
+    const tituloBarras = isSeguridad ? 'Tendencia de Reportes (Últimos 7 días)' : 'Tendencia de Tickets (Últimos 7 días)';
+    const mensajeVacioBarras = isSeguridad ? 'No se registraron reportes en los últimos 7 días.' : 'No se reportaron tickets en los últimos 7 días.';
+    const nombreBarra = isSeguridad ? 'Reportes Creados' : 'Tickets Creados';
+    const IconoPrincipal = isSeguridad ? ShieldAlert : Ticket; // Cambia el icono de la tarjeta
+
+    let subtituloHeader = 'Resumen del estado de tus reportes de soporte técnico.';
+    if (isAdmin) subtituloHeader = 'Resumen general de la infraestructura y atención técnica.';
+    if (isSeguridad) subtituloHeader = 'Resumen del estado de tus reportes de seguridad en caseta.';
 
     useEffect(() => {
         const fetchMetrics = async () => {
@@ -32,19 +50,21 @@ export const Dashboard = () => {
         return <div className="flex justify-center items-center h-64 text-slate-500">Cargando métricas operativas...</div>;
     }
 
-    // Colores para la gráfica circular
+    // Colores para la gráfica circular (Incluye los estatus de TI y los de Seguridad)
     const COLORS = {
         'Abierto': '#f59e0b',
         'En_Progreso': '#3b82f6',
         'Esperando_Piezas': '#8b5cf6',
         'Resuelto': '#10b981',
-        'Cerrado': '#64748b'
+        'Cerrado': '#64748b',
+        // Estatus exclusivos de Seguridad
+        'Pendiente': '#f59e0b',
+        'En_Revision': '#3b82f6'
     };
 
     // Formateador de fecha corto (ej. "2026-09-02" -> "02 sep")
     const formatearFecha = (fechaString) => {
         if (!fechaString) return '';
-        // Se añade T00:00:00 para evitar que cambie el día por la zona horaria del navegador
         const fecha = new Date(fechaString + 'T00:00:00'); 
         return fecha.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
     };
@@ -54,31 +74,36 @@ export const Dashboard = () => {
             <div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <Activity className="text-blue-600" size={28} />
-                    ¡Hola, {user?.nombre_completo?.split(' ')[0] || 'Operador'}!
+                    ¡Hola, {user?.nombre_completo?.split(' ')[0] || (isSeguridad ? 'Guardia' : 'Operador')}!
                 </h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    {isAdmin ? 'Resumen general de la infraestructura y atención técnica.' : 'Resumen del estado de tus reportes de soporte técnico.'}
+                    {subtituloHeader}
                 </p>
             </div>
 
             {/* Fila 1: KPIs (Tarjetas de resumen) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-                    <div className="p-3 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg"><Ticket size={24} /></div>
+                    <div className="p-3 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg">
+                        <IconoPrincipal size={24} />
+                    </div>
                     <div>
-                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Tickets Activos</p>
+                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{tituloActivos}</p>
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{dashboardData.kpis.tickets_activos}</h3>
                     </div>
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-                    <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg"><CheckCircle size={24} /></div>
+                    <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                        <CheckCircle size={24} />
+                    </div>
                     <div>
-                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Tickets Resueltos</p>
+                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{tituloResueltos}</p>
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{dashboardData.kpis.tickets_resueltos}</h3>
                     </div>
                 </div>
 
+                {/* Solo el Administrador ve las métricas de las cámaras */}
                 {isAdmin && (
                     <>
                         <div className={`p-6 rounded-xl border shadow-sm flex items-center gap-4 transition-all hover:shadow-md ${dashboardData.kpis.camaras_offline > 0 ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/50' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'}`}>
@@ -107,7 +132,7 @@ export const Dashboard = () => {
                 
                 {/* Gráfica 1: Distribución por Estatus */}
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Distribución de Tickets por Estatus</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">{tituloDonut}</h3>
                     <div className="h-72">
                         {dashboardData.graficas.tickets_por_estatus?.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
@@ -136,9 +161,9 @@ export const Dashboard = () => {
                     </div>
                 </div>
 
-                {/* Gráfica 2: Tendencia de Tickets (Últimos 7 días) */}
+                {/* Gráfica 2: Tendencia (Últimos 7 días) */}
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Tendencia de Tickets (Últimos 7 días)</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">{tituloBarras}</h3>
                     <div className="h-72">
                         {dashboardData.graficas.tickets_por_dia?.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
@@ -161,12 +186,12 @@ export const Dashboard = () => {
                                         labelFormatter={formatearFecha}
                                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     />
-                                    <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Tickets Creados" />
+                                    <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} name={nombreBarra} />
                                 </BarChart>
                             </ResponsiveContainer>
                         ) : (
                             <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                                No se reportaron tickets en los últimos 7 días.
+                                {mensajeVacioBarras}
                             </div>
                         )}
                     </div>

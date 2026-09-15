@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { ShieldAlert, Search, RefreshCw, Pencil, Trash2, X, Save, UserCircle } from 'lucide-react'; // Agregué el icono UserCircle
+import { ShieldAlert, Search, RefreshCw, Pencil, Trash2, X, Save, UserCircle, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const ReportesSeguridad = () => {
     const { user } = useAuth();
-    // Verificamos si es administrador
     const isAdmin = user?.rol === 'Administrador';
     
     const [reportes, setReportes] = useState([]);
+    const [camaras, setCamaras] = useState([]); // Para llenar el selector de cámaras
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     
@@ -17,16 +17,21 @@ export const ReportesSeguridad = () => {
     const [totalPages, setTotalPages] = useState(1);
     const [sortOrder, setSortOrder] = useState('desc');
 
-    // Estados para el Modal de Edición
+    // Estados para el Modal Unificado (Crear/Editar)
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editMode, setEditMode] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
     const [formData, setFormData] = useState({
         id: null,
+        camara_id: '',
+        fecha_hora: '',
         tipo_incidente: '',
         descripcion: '',
         estatus: 'Pendiente'
     });
 
+    // Cargar Reportes
     const fetchReportes = async () => {
         setLoading(true);
         try {
@@ -40,9 +45,31 @@ export const ReportesSeguridad = () => {
         }
     };
 
+    // Cargar Cámaras para el selector
+    const fetchCamaras = async () => {
+        try {
+            const response = await api.get('/cctv');
+            setCamaras(response.data.data || []);
+        } catch (error) {
+            console.error("Error al cargar cámaras:", error);
+        }
+    };
+
     useEffect(() => {
         fetchReportes();
     }, [currentPage, sortOrder]);
+
+    useEffect(() => {
+        fetchCamaras(); // Se cargan las cámaras una vez al inicio
+    }, []);
+
+    // Helper: Convierte fechas de la BD al formato que requiere el input type="datetime-local"
+    const formatForDateTimeLocal = (dateString) => {
+        if (!dateString) return '';
+        const d = new Date(dateString);
+        const pad = (n) => n.toString().padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
 
     // Actualización rápida de estatus (Solo para Admin desde la tabla)
     const handleStatusChange = async (id, nuevoEstatus) => {
@@ -54,10 +81,27 @@ export const ReportesSeguridad = () => {
         }
     };
 
-    // Abrir modal con los datos del reporte seleccionado
+    // Abrir modal para CREAR
+    const openCreateModal = () => {
+        setEditMode(false);
+        setFormData({
+            id: null,
+            camara_id: '',
+            fecha_hora: formatForDateTimeLocal(new Date()), // Hora actual por defecto
+            tipo_incidente: '',
+            descripcion: '',
+            estatus: 'Pendiente'
+        });
+        setIsModalOpen(true);
+    };
+
+    // Abrir modal para EDITAR
     const openEditModal = (rep) => {
+        setEditMode(true);
         setFormData({
             id: rep.id,
+            camara_id: rep.camara_id || '',
+            fecha_hora: formatForDateTimeLocal(rep.fecha_incidente || rep.date_created),
             tipo_incidente: rep.tipo_incidente || '',
             descripcion: rep.descripcion || '',
             estatus: rep.estatus || 'Pendiente'
@@ -65,16 +109,31 @@ export const ReportesSeguridad = () => {
         setIsModalOpen(true);
     };
 
-    // Guardar edición desde el modal
-    const handleEditSubmit = async (e) => {
+    // Guardar (Crear o Editar) desde el modal unificado
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            await api.put(`/reportes-seguridad/${formData.id}`, formData);
+            // Adaptamos los datos para enviarlos al backend
+            const payload = {
+                camara_id: formData.camara_id,
+                fecha_incidente: formData.fecha_hora, // Ojo con el nombre de tu columna en BD
+                tipo_incidente: formData.tipo_incidente,
+                descripcion: formData.descripcion,
+                estatus: formData.estatus
+            };
+
+            if (editMode) {
+                await api.put(`/reportes-seguridad/${formData.id}`, payload);
+            } else {
+                await api.post('/reportes-seguridad', payload);
+                setCurrentPage(1); // Volvemos a la página 1 si creamos uno nuevo
+            }
+            
             setIsModalOpen(false);
             fetchReportes();
         } catch (error) {
-            alert(error.response?.data?.message || "Ocurrió un error al guardar los cambios.");
+            alert(error.response?.data?.message || "Ocurrió un error al guardar el reporte.");
         } finally {
             setIsSubmitting(false);
         }
@@ -104,8 +163,7 @@ export const ReportesSeguridad = () => {
     const filteredReportes = reportes.filter(rep => 
         rep.tipo_incidente?.toLowerCase().includes(searchTerm.toLowerCase()) || 
         rep.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        // También permitimos al admin buscar por nombre del guardia
-        (isAdmin && rep.guardia?.nombre_completo?.toLowerCase().includes(searchTerm.toLowerCase()))
+        rep.guardia?.nombre_completo?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
@@ -120,6 +178,10 @@ export const ReportesSeguridad = () => {
                         Historial de incidentes y novedades reportadas desde caseta.
                     </p>
                 </div>
+                {/* BOTÓN PARA NUEVO REPORTE */}
+                <button onClick={openCreateModal} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-sm transition-colors">
+                    <Plus size={18} /><span>Registrar Novedad</span>
+                </button>
             </div>
 
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
@@ -128,12 +190,11 @@ export const ReportesSeguridad = () => {
                         <div className="relative w-full sm:w-72">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <input 
-                                type="text" placeholder={isAdmin ? "Buscar por incidente, descripción o guardia..." : "Buscar por tipo o descripción..."}
+                                type="text" placeholder={isAdmin ? "Buscar por incidente o guardia..." : "Buscar por tipo o descripción..."}
                                 className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
                                 value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        
                         <select 
                             className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 outline-none"
                             value={sortOrder}
@@ -143,7 +204,6 @@ export const ReportesSeguridad = () => {
                             <option value="asc">Más antiguos primero</option>
                         </select>
                     </div>
-
                     <button onClick={fetchReportes} className="p-2 text-slate-500 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Actualizar datos">
                         <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
                     </button>
@@ -154,8 +214,7 @@ export const ReportesSeguridad = () => {
                         <thead>
                             <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                                 <th className="p-4 font-semibold">Fecha / Hora</th>
-                                {/* NUEVA COLUMNA: Solo visible para Administrador */}
-                                {isAdmin && <th className="p-4 font-semibold">Reportado Por</th>}
+                                <th className="p-4 font-semibold">Reportado Por</th>
                                 <th className="p-4 font-semibold">Cámara (Origen)</th>
                                 <th className="p-4 font-semibold">Tipo Incidente</th>
                                 <th className="p-4 font-semibold">Descripción</th>
@@ -165,29 +224,23 @@ export const ReportesSeguridad = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan={isAdmin ? "7" : "6"} className="p-8 text-center text-slate-500">Cargando bitácora...</td></tr>
+                                <tr><td colSpan="7" className="p-8 text-center text-slate-500">Cargando bitácora...</td></tr>
                             ) : filteredReportes.length === 0 ? (
-                                <tr><td colSpan={isAdmin ? "7" : "6"} className="p-8 text-center text-slate-500">No hay reportes de seguridad registrados.</td></tr>
+                                <tr><td colSpan="7" className="p-8 text-center text-slate-500">No hay reportes de seguridad registrados.</td></tr>
                             ) : (
                                 filteredReportes.map((rep) => {
                                     const canEdit = isAdmin || rep.usuario_reporta_id === user?.id || rep.user_create_id === user?.id;
-
                                     return (
                                         <tr key={rep.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                             <td className="p-4 text-sm font-medium text-slate-900 dark:text-white">
                                                 {new Date(rep.fecha_incidente || rep.date_created).toLocaleString()}
                                             </td>
-                                            
-                                            {/* NUEVO DATO: Nombre del guardia, solo visible para Administrador */}
-                                            {isAdmin && (
-                                                <td className="p-4 text-sm text-slate-700 dark:text-slate-300">
-                                                    <div className="flex items-center gap-2">
-                                                        <UserCircle size={16} className="text-slate-400" />
-                                                        <span className="font-semibold">{rep.guardia?.nombre_completo || 'Desconocido'}</span>
-                                                    </div>
-                                                </td>
-                                            )}
-
+                                            <td className="p-4 text-sm text-slate-700 dark:text-slate-300">
+                                                <div className="flex items-center gap-2">
+                                                    <UserCircle size={16} className="text-slate-400" />
+                                                    <span className="font-semibold">{rep.guardia?.nombre_completo || 'Desconocido'}</span>
+                                                </div>
+                                            </td>
                                             <td className="p-4 text-sm text-slate-600 dark:text-slate-300">
                                                 {rep.camara ? `${rep.camara.nombre_camara} (${rep.camara.ubicacion})` : `Cámara ID: ${rep.camara_id}`}
                                             </td>
@@ -236,80 +289,119 @@ export const ReportesSeguridad = () => {
 
                 {!loading && reportes.length > 0 && (
                     <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                        <button 
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                            disabled={currentPage === 1} 
-                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
-                        >
+                        <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm">
                             Anterior
                         </button>
                         <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
                             Página {currentPage} de {totalPages}
                         </span>
-                        <button 
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                            disabled={currentPage === totalPages} 
-                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
-                        >
+                        <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm">
                             Siguiente
                         </button>
                     </div>
                 )}
             </div>
 
-            {/* Modal de Edición */}
+            {/* MODAL UNIFICADO: REGISTRO Y EDICIÓN */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                                Editar Reporte
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-red-50 dark:bg-red-900/20">
+                            <h3 className="text-lg font-bold text-red-700 dark:text-red-400 flex items-center gap-2">
+                                <ShieldAlert size={20} />
+                                {editMode ? 'Editar Reporte de Seguridad' : 'Bitácora de Novedades'}
                             </h3>
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                                <X size={20} />
+                            </button>
                         </div>
 
-                        <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Tipo de Incidente</label>
-                                <input 
-                                    required 
-                                    type="text" 
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-red-500 outline-none" 
-                                    value={formData.tipo_incidente} 
-                                    onChange={(e) => setFormData({...formData, tipo_incidente: e.target.value})} 
-                                />
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Cámara Involucrada</label>
+                                    <select 
+                                        required
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                                        value={formData.camara_id || ''} 
+                                        onChange={(e) => setFormData({...formData, camara_id: e.target.value})}
+                                    >
+                                        <option value="">-- Seleccionar --</option>
+                                        {camaras.map(cam => (
+                                            <option key={cam.id} value={cam.id}>{cam.nombre_camara} - {cam.ubicacion}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Fecha y Hora Exacta</label>
+                                    <input 
+                                        required
+                                        type="datetime-local" 
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                                        value={formData.fecha_hora || ''} 
+                                        onChange={(e) => setFormData({...formData, fecha_hora: e.target.value})}
+                                    />
+                                </div>
                             </div>
                             
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Descripción</label>
-                                <textarea 
-                                    required 
-                                    rows="4"
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-red-500 outline-none resize-none" 
-                                    value={formData.descripcion} 
-                                    onChange={(e) => setFormData({...formData, descripcion: e.target.value})} 
-                                ></textarea>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Tipo de Incidente</label>
+                                <select 
+                                    required
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                                    value={formData.tipo_incidente || ''} 
+                                    onChange={(e) => setFormData({...formData, tipo_incidente: e.target.value})}
+                                >
+                                    <option value="">-- Seleccionar --</option>
+                                    <option value="Robo/Intento">Robo o Intento</option>
+                                    <option value="Accidente">Accidente</option>
+                                    <option value="Falla de Equipo">Falla de Equipo</option>
+                                    <option value="Puerta/Acceso Abierto">Puerta/Acceso Abierto</option>
+                                    <option value="Persona Sospechosa">Persona Sospechosa</option>
+                                    <option value="Otro">Otro</option>
+                                </select>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Estatus del Reporte</label>
-                                <select 
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-red-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed" 
-                                    value={formData.estatus} 
-                                    onChange={(e) => setFormData({...formData, estatus: e.target.value})}
-                                    disabled={!isAdmin} 
-                                >
-                                    <option value="Pendiente">Pendiente</option>
-                                    <option value="En_Revision">En Revisión</option>
-                                    <option value="Resuelto">Resuelto</option>
-                                </select>
-                                {!isAdmin && <p className="text-xs text-slate-500 mt-1">Solo el administrador de ICT puede cambiar el estatus.</p>}
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Descripción de los hechos</label>
+                                <textarea 
+                                    required
+                                    rows="3"
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-red-500 outline-none text-sm resize-none"
+                                    placeholder="Describe las características de la persona/vehículo y qué sucedió..."
+                                    value={formData.descripcion || ''} 
+                                    onChange={(e) => setFormData({...formData, descripcion: e.target.value})}
+                                />
                             </div>
 
-                            <div className="pt-4 flex gap-3 justify-end">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">Cancelar</button>
-                                <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors">
-                                    <Save size={18} /><span>Actualizar Reporte</span>
+                            {editMode && (
+                                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Estatus del Reporte</label>
+                                    <select 
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white outline-none text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                                        value={formData.estatus || 'Pendiente'} 
+                                        onChange={(e) => setFormData({...formData, estatus: e.target.value})}
+                                        disabled={!isAdmin}
+                                    >
+                                        <option value="Pendiente">Pendiente</option>
+                                        <option value="En_Revision">En Revisión</option>
+                                        <option value="Resuelto">Resuelto</option>
+                                    </select>
+                                    {!isAdmin && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1">
+                                            <span>Solo el administrador de ICT puede cambiar el estatus.</span>
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="pt-2 flex gap-3 justify-end">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                                    Cancelar
+                                </button>
+                                <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-70">
+                                    <Save size={16} />
+                                    <span>{editMode ? 'Actualizar Reporte' : 'Registrar Novedad'}</span>
                                 </button>
                             </div>
                         </form>
