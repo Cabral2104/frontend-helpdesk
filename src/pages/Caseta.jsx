@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { AlertTriangle, Video, X, Save, Camera, Maximize, Minimize, Square, Grid, Columns, LayoutGrid } from 'lucide-react';
+import { AlertTriangle, Video, X, Save, Camera, Maximize, Minimize, Filter } from 'lucide-react';
 
 export const Caseta = () => {
     const [camaras, setCamaras] = useState([]);
     const [loading, setLoading] = useState(true);
     
     // Controles de Vista
-    const [gridCols, setGridCols] = useState(3);
     const [expandedCam, setExpandedCam] = useState(null);
+    
+    // Filtro de Cámaras
+    const [camarasSeleccionadas, setCamarasSeleccionadas] = useState([]);
+    const [mostrarFiltro, setMostrarFiltro] = useState(false);
     
     // Estados para el Reporte
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -20,11 +23,35 @@ export const Caseta = () => {
         fecha_incidente: new Date().toISOString().slice(0, 16)
     });
 
+    // 1. CARGAR CÁMARAS Y RECUPERAR MEMORIA
     useEffect(() => {
         const fetchCamarasCaseta = async () => {
             try {
                 const response = await api.get('/cctv/caseta');
-                setCamaras(response.data.data || []);
+                const fetchedCamaras = response.data.data || [];
+                setCamaras(fetchedCamaras);
+                
+                // Intentamos recuperar la selección previa del navegador
+                const seleccionGuardada = localStorage.getItem('wittur_camaras_seleccionadas');
+                
+                if (seleccionGuardada) {
+                    try {
+                        const parsedIds = JSON.parse(seleccionGuardada);
+                        // Filtramos para asegurar que los IDs guardados sigan existiendo en la BD
+                        const idsValidos = parsedIds.filter(id => fetchedCamaras.some(cam => cam.id === id));
+                        
+                        if (idsValidos.length > 0) {
+                            setCamarasSeleccionadas(idsValidos);
+                        } else {
+                            setCamarasSeleccionadas(fetchedCamaras.map(cam => cam.id));
+                        }
+                    } catch (e) {
+                        setCamarasSeleccionadas(fetchedCamaras.map(cam => cam.id));
+                    }
+                } else {
+                    // Si es la primera vez que entra, encendemos todas por defecto
+                    setCamarasSeleccionadas(fetchedCamaras.map(cam => cam.id));
+                }
             } catch (error) {
                 console.error("Error al cargar cámaras de caseta:", error);
             } finally {
@@ -33,6 +60,21 @@ export const Caseta = () => {
         };
         fetchCamarasCaseta();
     }, []);
+
+    // 2. GUARDAR EN MEMORIA CADA VEZ QUE CAMBIA LA SELECCIÓN
+    useEffect(() => {
+        if (!loading && camaras.length > 0) {
+            localStorage.setItem('wittur_camaras_seleccionadas', JSON.stringify(camarasSeleccionadas));
+        }
+    }, [camarasSeleccionadas, loading, camaras]);
+
+    const toggleCamara = (id) => {
+        setCamarasSeleccionadas(prev => 
+            prev.includes(id) 
+                ? prev.filter(camId => camId !== id)
+                : [...prev, id]
+        );
+    };
 
     const openReportModal = (camaraId = '') => {
         setReportData({
@@ -58,15 +100,16 @@ export const Caseta = () => {
         }
     };
 
-    // Determinamos la clase de Tailwind para la cuadrícula
+    // LÓGICA ADAPTATIVA: Calculamos la cuadrícula en base a la cantidad seleccionada
     const getGridClass = () => {
-        switch(gridCols) {
-            case 1: return 'grid-cols-1 md:w-2/3 mx-auto';
-            case 2: return 'grid-cols-1 md:grid-cols-2';
-            case 4: return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4';
-            case 3: 
-            default: return 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3';
-        }
+        const count = camarasSeleccionadas.length;
+        if (count === 0) return 'grid-cols-1';
+        if (count === 1) return 'grid-cols-1 md:w-3/4 lg:w-2/3 mx-auto';
+        if (count === 2) return 'grid-cols-1 md:grid-cols-2';
+        if (count === 3) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+        if (count === 4) return 'grid-cols-1 md:grid-cols-2'; 
+        if (count >= 5 && count <= 9) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+        return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'; 
     };
 
     if (loading) {
@@ -84,36 +127,63 @@ export const Caseta = () => {
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-4">
-                    {/* Controles de Cuadrícula */}
-                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <button onClick={() => setGridCols(1)} className={`p-2 rounded-md transition-colors ${gridCols === 1 ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`} title="Vista Individual">
-                            <Square size={18} />
+                    {/* Botón y Menú de Filtro */}
+                    <div className="relative">
+                        <button 
+                            onClick={() => setMostrarFiltro(!mostrarFiltro)}
+                            className="flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm font-semibold transition-colors text-slate-700 dark:text-slate-200 shadow-sm"
+                        >
+                            <Filter size={18} />
+                            <span className="hidden sm:inline">Filtrar Cámaras</span>
+                            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 py-0.5 px-2 rounded-full text-xs ml-1">
+                                {camarasSeleccionadas.length}
+                            </span>
                         </button>
-                        <button onClick={() => setGridCols(2)} className={`p-2 rounded-md transition-colors ${gridCols === 2 ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`} title="Vista 2x2">
-                            <Columns size={18} />
-                        </button>
-                        <button onClick={() => setGridCols(3)} className={`p-2 rounded-md transition-colors ${gridCols === 3 ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`} title="Vista 3x3">
-                            <LayoutGrid size={18} />
-                        </button>
-                        <button onClick={() => setGridCols(4)} className={`p-2 rounded-md transition-colors ${gridCols === 4 ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`} title="Vista 4x4">
-                            <Grid size={18} />
-                        </button>
+
+                        {mostrarFiltro && (
+                            <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 p-3">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h4 className="text-xs font-bold text-slate-500 uppercase">Seleccionar Visibles</h4>
+                                    <button 
+                                        onClick={() => setCamarasSeleccionadas(camaras.map(c => c.id))}
+                                        className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                                    >
+                                        Ver todas
+                                    </button>
+                                </div>
+                                <div className="max-h-60 overflow-y-auto flex flex-col gap-2 pr-1">
+                                    {camaras.map(cam => (
+                                        <label key={cam.id} className="flex items-center gap-2 cursor-pointer p-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 rounded">
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 bg-white dark:bg-slate-800"
+                                                checked={camarasSeleccionadas.includes(cam.id)}
+                                                onChange={() => toggleCamara(cam.id)}
+                                            />
+                                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
+                                                {cam.nombre_camara}
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <button onClick={() => openReportModal()} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-sm transition-colors">
-                        <AlertTriangle size={18} /><span>Reportar Anomalía</span>
+                        <AlertTriangle size={18} /><span className="hidden sm:inline">Reportar Anomalía</span>
                     </button>
                 </div>
             </div>
 
-            {/* Cuadrícula Dinámica de Cámaras */}
+            {/* Cuadrícula Dinámica de Cámaras Adaptativa */}
             <div className={`grid gap-4 transition-all duration-300 ease-in-out ${getGridClass()}`}>
-                {camaras.length === 0 ? (
+                {camarasSeleccionadas.length === 0 ? (
                     <div className="col-span-full p-8 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                        No hay cámaras habilitadas para visualización en caseta.
+                        No hay cámaras seleccionadas. Abre el filtro para visualizar.
                     </div>
                 ) : (
-                    camaras.map((camara) => (
+                    camaras.filter(cam => camarasSeleccionadas.includes(cam.id)).map((camara) => (
                         <div key={camara.id} className="bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-700 flex flex-col group relative">
                             
                             {/* Área de Video WebRTC */}
@@ -199,10 +269,9 @@ export const Caseta = () => {
                 </div>
             )}
 
-            {/* Modal de Reporte de Seguridad (Se mantiene igual que antes) */}
+            {/* Modal de Reporte de Seguridad */}
             {isReportModalOpen && (
                 <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-                    {/* ... (Contenido del modal de reporte intacto) ... */}
                     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-full">
                         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-red-50 dark:bg-red-900/20 shrink-0">
                             <h3 className="text-lg font-bold text-red-700 dark:text-red-400 flex items-center gap-2">
