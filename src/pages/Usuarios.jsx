@@ -23,23 +23,15 @@ export const Usuarios = () => {
         rol: 'Operador'     // Rol por defecto
     });
 
-    // Los 4 roles exactos de acceso al sistema
     const rolesDisponibles = ["Administrador", "Operador", "Seguridad", "Administrativo"];
 
-    // Catálogo de Departamentos (Mapeado con los IDs de tu BD)
     const departamentosDisponibles = [
-        { id: 1, nombre: "ICT / Sistemas" },
-        { id: 2, nombre: "Recursos Humanos" },
-        { id: 3, nombre: "Producción" },
-        { id: 4, nombre: "Calidad" },
-        { id: 5, nombre: "Mantenimiento" },
-        { id: 6, nombre: "Logística" },
-        { id: 7, nombre: "Industrialización" },
-        { id: 8, nombre: "Ingeniería" },
-        { id: 9, nombre: "Compras" },
-        { id: 10, nombre: "Gerencia" },
-        { id: 11, nombre: "Almacén" },
-        { id: 12, nombre: "Enfermería" }
+        { id: 1, nombre: "ICT / Sistemas" }, { id: 2, nombre: "Recursos Humanos" },
+        { id: 3, nombre: "Producción" }, { id: 4, nombre: "Calidad" },
+        { id: 5, nombre: "Mantenimiento" }, { id: 6, nombre: "Logística" },
+        { id: 7, nombre: "Industrialización" }, { id: 8, nombre: "Ingeniería" },
+        { id: 9, nombre: "Compras" }, { id: 10, nombre: "Gerencia" },
+        { id: 11, nombre: "Almacén" }, { id: 12, nombre: "Enfermería" }
     ];
 
     const fetchUsuarios = async () => {
@@ -100,7 +92,6 @@ export const Usuarios = () => {
         }
     };
 
-    // Helper para obtener el nombre del departamento en la tabla
     const getDepartamentoNombre = (id) => {
         const depto = departamentosDisponibles.find(d => d.id === parseInt(id));
         return depto ? depto.nombre : `ID: ${id}`;
@@ -195,7 +186,6 @@ export const Usuarios = () => {
                 )}
             </div>
 
-            {/* Modal de Registro/Edición */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
@@ -220,11 +210,7 @@ export const Usuarios = () => {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Departamento</label>
-                                    <select 
-                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" 
-                                        value={formData.departamento_id} 
-                                        onChange={(e) => setFormData({...formData, departamento_id: parseInt(e.target.value)})}
-                                    >
+                                    <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.departamento_id} onChange={(e) => setFormData({...formData, departamento_id: parseInt(e.target.value)})}>
                                         {departamentosDisponibles.map(d => (
                                             <option key={d.id} value={d.id}>{d.nombre}</option>
                                         ))}
@@ -232,11 +218,7 @@ export const Usuarios = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Rol de Acceso</label>
-                                    <select 
-                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" 
-                                        value={formData.rol} 
-                                        onChange={(e) => setFormData({...formData, rol: e.target.value})}
-                                    >
+                                    <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.rol} onChange={(e) => setFormData({...formData, rol: e.target.value})}>
                                         {rolesDisponibles.map(r => (
                                             <option key={r} value={r}>{r}</option>
                                         ))}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, Menu, X, MonitorPlay, ShieldAlert, Users } from 'lucide-react';
+import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, Menu, X, MonitorPlay, ShieldAlert, Users, Download } from 'lucide-react';
 
 export const MainLayout = () => {
     const { user, logout } = useAuth();
@@ -90,12 +90,18 @@ export const MainLayout = () => {
                         Gestión de Tickets
                     </Link>
 
-                    {/* Solo el Administrador puede ver y gestionar usuarios */}
+                    {/* Solo el Administrador puede ver y gestionar usuarios y exportar reportes */}
                     {isAdmin && (
-                        <Link to="/usuarios" className={getLinkStyles('/usuarios')}>
-                            <Users size={18} />
-                            Gestión de Usuarios
-                        </Link>
+                        <>
+                            <Link to="/usuarios" className={getLinkStyles('/usuarios')}>
+                                <Users size={18} />
+                                Gestión de Usuarios
+                            </Link>
+                            <Link to="/exportar-reportes" className={getLinkStyles('/exportar-reportes')}>
+                                <Download size={18} />
+                                Exportar Datos
+                            </Link>
+                        </>
                     )}
 
                     {/* INFRAESTRUCTURA: Estrictamente para Administrador */}
