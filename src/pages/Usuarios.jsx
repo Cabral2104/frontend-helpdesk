@@ -37,7 +37,8 @@ export const Usuarios = () => {
     const fetchUsuarios = async () => {
         setLoading(true);
         try {
-            const response = await api.get(`/usuarios?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}`);
+            // Agregamos el search a la URL
+            const response = await api.get(`/usuarios?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`);
             setUsuarios(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
@@ -47,9 +48,19 @@ export const Usuarios = () => {
         }
     };
 
+    // Efecto unificado con debounce para la búsqueda y paginación
     useEffect(() => {
-        fetchUsuarios();
-    }, [currentPage, sortOrder]);
+        const delayDebounce = setTimeout(() => {
+            fetchUsuarios();
+        }, 400); // 400ms de retraso para no saturar la BD
+
+        return () => clearTimeout(delayDebounce);
+    }, [searchTerm, currentPage, sortOrder]);
+
+    const handleSearchChange = (e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1); // Regresamos a la página 1 cuando el usuario busca algo nuevo
+    };
 
     const openCreateModal = () => {
         setEditMode(false);
@@ -97,12 +108,6 @@ export const Usuarios = () => {
         return depto ? depto.nombre : `ID: ${id}`;
     };
 
-    const filteredUsuarios = usuarios.filter(u => 
-        u.nombre_completo?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        u.numero_nomina?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.rol?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
     return (
         <div className="space-y-6 relative">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -128,7 +133,8 @@ export const Usuarios = () => {
                             <input 
                                 type="text" placeholder="Buscar por nómina, nombre o rol..." 
                                 className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                                value={searchTerm} 
+                                onChange={handleSearchChange}
                             />
                         </div>
                     </div>
@@ -151,10 +157,10 @@ export const Usuarios = () => {
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
                                 <tr><td colSpan="5" className="p-8 text-center text-slate-500">Cargando usuarios...</td></tr>
-                            ) : filteredUsuarios.length === 0 ? (
-                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">No hay usuarios registrados.</td></tr>
+                            ) : usuarios.length === 0 ? (
+                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">No se encontraron usuarios.</td></tr>
                             ) : (
-                                filteredUsuarios.map((u) => (
+                                usuarios.map((u) => (
                                     <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="p-4 text-sm font-bold text-slate-900 dark:text-white">{u.numero_nomina}</td>
                                         <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium">{u.nombre_completo}</td>

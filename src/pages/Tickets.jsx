@@ -21,7 +21,7 @@ export const Tickets = () => {
     // Estados de Modales
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [categorias, setCategorias] = useState([]); // NUEVO ESTADO PARA CATEGORÍAS
+    const [categorias, setCategorias] = useState([]);
     const [createFormData, setCreateFormData] = useState({ titulo: '', descripcion: '', prioridad: 'Media', categoria_id: '' });
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -36,7 +36,8 @@ export const Tickets = () => {
     const fetchTickets = async () => {
         setLoading(true);
         try {
-            const response = await api.get(`/tickets?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}`);
+            // Se agregaron los parámetros de búsqueda y categoría a la URL
+            const response = await api.get(`/tickets?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}&categoria_id=${filterCategory}`);
             setTickets(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
@@ -46,9 +47,24 @@ export const Tickets = () => {
         }
     };
 
+    // Efecto unificado con debounce para la búsqueda y filtros
     useEffect(() => {
-        fetchTickets();
-    }, [currentPage, sortOrder]);
+        const delayDebounce = setTimeout(() => {
+            fetchTickets();
+        }, 400);
+
+        return () => clearTimeout(delayDebounce);
+    }, [searchTerm, filterCategory, sortOrder, currentPage]);
+
+    const handleSearchChange = (e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1);
+    };
+
+    const handleCategoryChange = (e) => {
+        setFilterCategory(e.target.value);
+        setCurrentPage(1);
+    };
 
     useEffect(() => {
         const fetchCategorias = async () => {
@@ -70,7 +86,7 @@ export const Tickets = () => {
         try {
             await api.post('/tickets', createFormData);
             setIsCreateModalOpen(false);
-            setCreateFormData({ titulo: '', descripcion: '', prioridad: 'Media', categoria_incidencia_id: 1 });
+            setCreateFormData({ titulo: '', descripcion: '', prioridad: 'Media', categoria_id: '' });
             setCurrentPage(1); 
             fetchTickets(); 
         } catch (error) {
@@ -148,13 +164,6 @@ export const Tickets = () => {
         return <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${styles[status] || defaultStyle}`}>{status || 'Abierto'}</span>;
     };
 
-    const filteredTickets = tickets.filter(ticket => {
-        const matchesSearch = ticket.descripcion_falla?.toLowerCase().includes(searchTerm.toLowerCase()) || ticket.id.toString().includes(searchTerm);
-        const matchesCategory = filterCategory === '' || ticket.categoria_id?.toString() === filterCategory.toString();
-    
-        return matchesSearch && matchesCategory;
-    });
-
     return (
         <div className="space-y-6 relative">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -180,24 +189,23 @@ export const Tickets = () => {
                         <div className="relative w-full sm:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <input 
-                                type="text" placeholder="Buscar en esta página..." 
+                                type="text" placeholder="Buscar ID o Descripción..." 
                                 className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                                value={searchTerm} 
+                                onChange={handleSearchChange}
                             />
                         </div>
 
-                        {/* NUEVO FILTRO DE CATEGORÍAS */}
                         <select 
                             className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             value={filterCategory}
-                            onChange={(e) => setFilterCategory(e.target.value)}
+                            onChange={handleCategoryChange}
                         >
                             <option value="">Todas las categorías</option>
                             {categorias.map((cat) => (
                                 <option key={cat.id} value={cat.id}>{cat.nombre}</option>
                             ))}
                         </select>
-                        {/* FIN NUEVO FILTRO */}
 
                         <select 
                             className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
@@ -230,11 +238,11 @@ export const Tickets = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan="7" className="p-8 text-center text-slate-500">Cargando...</td></tr>
-                            ) : filteredTickets.length === 0 ? (
-                                <tr><td colSpan="7" className="p-8 text-center text-slate-500">No se encontraron tickets en esta página.</td></tr>
+                                <tr><td colSpan="9" className="p-8 text-center text-slate-500">Cargando...</td></tr>
+                            ) : tickets.length === 0 ? (
+                                <tr><td colSpan="9" className="p-8 text-center text-slate-500">No se encontraron tickets.</td></tr>
                             ) : (
-                                filteredTickets.map((ticket) => (
+                                tickets.map((ticket) => (
                                     <tr key={ticket.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="p-4 text-sm font-medium text-slate-900 dark:text-white">#{ticket.id}</td>
                                         <td className="p-4 text-sm text-slate-600 dark:text-slate-300">
@@ -278,17 +286,27 @@ export const Tickets = () => {
                     </table>
                 </div>
                 
-                <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                        Anterior
-                    </button>
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                        Página {currentPage} de {totalPages}
-                    </span>
-                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                        Siguiente
-                    </button>
-                </div>
+                {!loading && tickets.length > 0 && (
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                            disabled={currentPage === 1} 
+                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
+                        >
+                            Anterior
+                        </button>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            Página {currentPage} de {totalPages}
+                        </span>
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                            disabled={currentPage === totalPages} 
+                            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm"
+                        >
+                            Siguiente
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* MODAL 1: Crear Ticket */}

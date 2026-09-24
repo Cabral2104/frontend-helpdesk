@@ -50,7 +50,8 @@ export const Inventario = () => {
     const fetchEquipos = async () => {
         setLoading(true);
         try {
-            const response = await api.get(`/equipos?page=${currentPage}`);
+            // Agregamos el search a la URL
+            const response = await api.get(`/equipos?page=${currentPage}&search=${searchTerm}`);
             setEquipos(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
@@ -60,9 +61,19 @@ export const Inventario = () => {
         }
     };
 
+    // Efecto unificado con debounce para la búsqueda y paginación
     useEffect(() => {
-        fetchEquipos();
-    }, [currentPage]);
+        const delayDebounce = setTimeout(() => {
+            fetchEquipos();
+        }, 400);
+
+        return () => clearTimeout(delayDebounce);
+    }, [searchTerm, currentPage]);
+
+    const handleSearchChange = (e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1); // Regresamos a la página 1 cuando el usuario busca algo nuevo
+    };
 
     // Crear o Editar Equipo
     const handleFormSubmit = async (e) => {
@@ -152,14 +163,8 @@ export const Inventario = () => {
 
     // ================= RENDERIZADO ================= //
 
-    const filteredEquipos = equipos.filter(eq => 
-        eq.usuario_asignado?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        eq.etiqueta?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        eq.numero_serie?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const equiposCriticos = filteredEquipos.filter(eq => eq.es_critico === 1);
-    const equiposGenerales = filteredEquipos.filter(eq => eq.es_critico === 0);
+    const equiposCriticos = equipos.filter(eq => eq.es_critico === 1);
+    const equiposGenerales = equipos.filter(eq => eq.es_critico === 0);
 
     const TableRow = ({ equipo }) => (
         <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-200 dark:border-slate-800 last:border-0">
@@ -207,7 +212,8 @@ export const Inventario = () => {
                     <input 
                         type="text" placeholder="Buscar Usuario, PC o Serie..." 
                         className="w-full pl-10 pr-4 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm"
-                        value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                        value={searchTerm} 
+                        onChange={handleSearchChange}
                     />
                 </div>
                 {isAdmin && (

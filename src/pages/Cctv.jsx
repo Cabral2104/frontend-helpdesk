@@ -20,12 +20,11 @@ export const Cctv = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editMode, setEditMode] = useState(false);
     
-    // ESTADO CON TODOS LOS CAMPOS NUEVOS
     const [formData, setFormData] = useState({
         id: null,
         nombre_camara: '',
         ubicacion: '',
-        numero_serie: '',    // <- NUEVO
+        numero_serie: '',
         ip_asignada: '',
         switch_conexion: '',
         puerto_switch: '',
@@ -37,7 +36,8 @@ export const Cctv = () => {
     const fetchCamaras = async () => {
         setLoading(true);
         try {
-            const response = await api.get(`/cctv?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}`);
+            // Se agregó el parámetro search a la URL
+            const response = await api.get(`/cctv?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`);
             setCamaras(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
@@ -47,13 +47,22 @@ export const Cctv = () => {
         }
     };
 
+    // Efecto unificado para cargar datos con debounce en la búsqueda
     useEffect(() => {
-        fetchCamaras();
-    }, [currentPage, sortOrder]);
+        const delayDebounce = setTimeout(() => {
+            fetchCamaras();
+        }, 400); // Espera 400ms después de que el usuario deja de escribir
+
+        return () => clearTimeout(delayDebounce);
+    }, [searchTerm, currentPage, sortOrder]);
+
+    const handleSearchChange = (e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1); // Regresa a la página 1 cada vez que se busca algo nuevo
+    };
 
     const openCreateModal = () => {
         setEditMode(false);
-        // LIMPIAR TODOS LOS CAMPOS
         setFormData({ 
             id: null, 
             nombre_camara: '', 
@@ -71,7 +80,6 @@ export const Cctv = () => {
 
     const openEditModal = (camara) => {
         setEditMode(true);
-        // PROTECCIÓN CONTRA VALORES NULOS DE LA BASE DE DATOS
         setFormData({ 
             ...camara,
             numero_serie: camara.numero_serie || '',
@@ -120,13 +128,6 @@ export const Cctv = () => {
         return <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800">Offline</span>;
     };
 
-    const filteredCamaras = camaras.filter(cam => 
-        cam.nombre_camara?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        cam.ubicacion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cam.ip_asignada?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cam.numero_serie?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
     return (
         <div className="space-y-6 relative">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -152,9 +153,10 @@ export const Cctv = () => {
                         <div className="relative w-full sm:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <input 
-                                type="text" placeholder="Buscar en esta página..." 
+                                type="text" placeholder="Buscar en todos los registros..." 
                                 className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                                value={searchTerm} 
+                                onChange={handleSearchChange}
                             />
                         </div>
                         <select 
@@ -186,10 +188,10 @@ export const Cctv = () => {
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
                                 <tr><td colSpan={isAdmin ? "6" : "5"} className="p-8 text-center text-slate-500">Cargando infraestructura...</td></tr>
-                            ) : filteredCamaras.length === 0 ? (
-                                <tr><td colSpan={isAdmin ? "6" : "5"} className="p-8 text-center text-slate-500">No hay cámaras registradas.</td></tr>
+                            ) : camaras.length === 0 ? (
+                                <tr><td colSpan={isAdmin ? "6" : "5"} className="p-8 text-center text-slate-500">No se encontraron cámaras.</td></tr>
                             ) : (
-                                filteredCamaras.map((camara) => (
+                                camaras.map((camara) => (
                                     <tr key={camara.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="p-4 text-sm text-slate-900 dark:text-white">
                                             <div className="font-bold">{camara.nombre_camara}</div>

@@ -8,16 +8,14 @@ export const ReportesSeguridad = () => {
     const isAdmin = user?.rol === 'Administrador';
     
     const [reportes, setReportes] = useState([]);
-    const [camaras, setCamaras] = useState([]); // Para llenar el selector de cámaras
+    const [camaras, setCamaras] = useState([]); 
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Estados de Paginación y Ordenamiento
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [sortOrder, setSortOrder] = useState('desc');
 
-    // Estados para el Modal Unificado (Crear/Editar)
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,11 +29,10 @@ export const ReportesSeguridad = () => {
         estatus: 'Pendiente'
     });
 
-    // Cargar Reportes
     const fetchReportes = async () => {
         setLoading(true);
         try {
-            const response = await api.get(`/reportes-seguridad?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}`);
+            const response = await api.get(`/reportes-seguridad?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`);
             setReportes(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
@@ -45,7 +42,6 @@ export const ReportesSeguridad = () => {
         }
     };
 
-    // Cargar Cámaras para el selector
     const fetchCamaras = async () => {
         try {
             const response = await api.get('/cctv');
@@ -56,14 +52,21 @@ export const ReportesSeguridad = () => {
     };
 
     useEffect(() => {
-        fetchReportes();
-    }, [currentPage, sortOrder]);
+        const delayDebounce = setTimeout(() => {
+            fetchReportes();
+        }, 400);
+        return () => clearTimeout(delayDebounce);
+    }, [searchTerm, currentPage, sortOrder]);
 
     useEffect(() => {
-        fetchCamaras(); // Se cargan las cámaras una vez al inicio
+        fetchCamaras(); 
     }, []);
 
-    // Helper: Convierte fechas de la BD al formato que requiere el input type="datetime-local"
+    const handleSearchChange = (e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1); 
+    };
+
     const formatForDateTimeLocal = (dateString) => {
         if (!dateString) return '';
         const d = new Date(dateString);
@@ -71,7 +74,6 @@ export const ReportesSeguridad = () => {
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
-    // Actualización rápida de estatus (Solo para Admin desde la tabla)
     const handleStatusChange = async (id, nuevoEstatus) => {
         try {
             await api.put(`/reportes-seguridad/${id}`, { estatus: nuevoEstatus });
@@ -81,13 +83,12 @@ export const ReportesSeguridad = () => {
         }
     };
 
-    // Abrir modal para CREAR
     const openCreateModal = () => {
         setEditMode(false);
         setFormData({
             id: null,
             camara_id: '',
-            fecha_hora: formatForDateTimeLocal(new Date()), // Hora actual por defecto
+            fecha_hora: formatForDateTimeLocal(new Date()),
             tipo_incidente: '',
             descripcion: '',
             estatus: 'Pendiente'
@@ -95,7 +96,6 @@ export const ReportesSeguridad = () => {
         setIsModalOpen(true);
     };
 
-    // Abrir modal para EDITAR
     const openEditModal = (rep) => {
         setEditMode(true);
         setFormData({
@@ -109,15 +109,13 @@ export const ReportesSeguridad = () => {
         setIsModalOpen(true);
     };
 
-    // Guardar (Crear o Editar) desde el modal unificado
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            // Adaptamos los datos para enviarlos al backend
             const payload = {
                 camara_id: formData.camara_id,
-                fecha_incidente: formData.fecha_hora, // Ojo con el nombre de tu columna en BD
+                fecha_incidente: formData.fecha_hora,
                 tipo_incidente: formData.tipo_incidente,
                 descripcion: formData.descripcion,
                 estatus: formData.estatus
@@ -127,7 +125,7 @@ export const ReportesSeguridad = () => {
                 await api.put(`/reportes-seguridad/${formData.id}`, payload);
             } else {
                 await api.post('/reportes-seguridad', payload);
-                setCurrentPage(1); // Volvemos a la página 1 si creamos uno nuevo
+                setCurrentPage(1); 
             }
             
             setIsModalOpen(false);
@@ -139,7 +137,6 @@ export const ReportesSeguridad = () => {
         }
     };
 
-    // Soft Delete del reporte
     const handleDelete = async (id) => {
         if (!window.confirm('¿Estás seguro de eliminar este reporte de la bitácora?')) return;
         try {
@@ -150,7 +147,6 @@ export const ReportesSeguridad = () => {
         }
     };
 
-    // Helper para los colores de las etiquetas
     const getStatusStyles = (estatus) => {
         switch(estatus) {
             case 'Resuelto': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800';
@@ -159,12 +155,6 @@ export const ReportesSeguridad = () => {
             default: return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800';
         }
     };
-
-    const filteredReportes = reportes.filter(rep => 
-        rep.tipo_incidente?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        rep.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        rep.guardia?.nombre_completo?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
     return (
         <div className="space-y-6 relative">
@@ -178,7 +168,6 @@ export const ReportesSeguridad = () => {
                         Historial de incidentes y novedades reportadas desde caseta.
                     </p>
                 </div>
-                {/* BOTÓN PARA NUEVO REPORTE */}
                 <button onClick={openCreateModal} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-sm transition-colors">
                     <Plus size={18} /><span>Registrar Novedad</span>
                 </button>
@@ -189,10 +178,12 @@ export const ReportesSeguridad = () => {
                     <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
                         <div className="relative w-full sm:w-72">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            {/* Actualizado el placeholder para indicar búsqueda por ID */}
                             <input 
-                                type="text" placeholder={isAdmin ? "Buscar por incidente o guardia..." : "Buscar por tipo o descripción..."}
+                                type="text" placeholder={isAdmin ? "Buscar ID, incidente o guardia..." : "Buscar ID, tipo o descripción..."}
                                 className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
-                                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                                value={searchTerm} 
+                                onChange={handleSearchChange}
                             />
                         </div>
                         <select 
@@ -213,6 +204,7 @@ export const ReportesSeguridad = () => {
                     <table className="w-full text-left border-collapse min-w-200">
                         <thead>
                             <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
+                                <th className="p-4 font-semibold">ID</th>
                                 <th className="p-4 font-semibold">Fecha / Hora</th>
                                 <th className="p-4 font-semibold">Reportado Por</th>
                                 <th className="p-4 font-semibold">Cámara (Origen)</th>
@@ -224,14 +216,17 @@ export const ReportesSeguridad = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan="7" className="p-8 text-center text-slate-500">Cargando bitácora...</td></tr>
-                            ) : filteredReportes.length === 0 ? (
-                                <tr><td colSpan="7" className="p-8 text-center text-slate-500">No hay reportes de seguridad registrados.</td></tr>
+                                <tr><td colSpan="8" className="p-8 text-center text-slate-500">Cargando bitácora...</td></tr>
+                            ) : reportes.length === 0 ? (
+                                <tr><td colSpan="8" className="p-8 text-center text-slate-500">No hay reportes de seguridad encontrados.</td></tr>
                             ) : (
-                                filteredReportes.map((rep) => {
+                                reportes.map((rep) => {
                                     const canEdit = isAdmin || rep.usuario_reporta_id === user?.id || rep.user_create_id === user?.id;
                                     return (
                                         <tr key={rep.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                            <td className="p-4 text-sm font-bold text-slate-900 dark:text-white">
+                                                #{rep.id}
+                                            </td>
                                             <td className="p-4 text-sm font-medium text-slate-900 dark:text-white">
                                                 {new Date(rep.fecha_incidente || rep.date_created).toLocaleString()}
                                             </td>
