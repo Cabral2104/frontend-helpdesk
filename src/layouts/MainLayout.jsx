@@ -1,23 +1,30 @@
-import { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, Menu, X, MonitorPlay, ShieldAlert, Users, Download } from 'lucide-react';
+import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, Menu, X, MonitorPlay, ShieldAlert, Users, Download, Bell } from 'lucide-react';
+import WitturLogo from '../assets/logo_wittur.png';
+import api from '../api/axios';
 
 export const MainLayout = () => {
     const { user, logout } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
     
-    // VALIDACIONES DE PERMISOS CORRECTAS
     const isAdmin = user?.rol === 'Administrador';
     const isSeguridad = user?.rol === 'Seguridad';
-    
-    // TI (Admin) ve Infraestructura completa. Guardia ve Seguridad.
     const canViewInfraestructura = isAdmin; 
     const canViewSeguridad = isAdmin || isSeguridad;
 
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    
+    // --- ESTADOS NOTIFICACIONES ---
+    const [notificaciones, setNotificaciones] = useState([]);
+    const [isNotifOpen, setIsNotifOpen] = useState(false);
+    const [hasUnread, setHasUnread] = useState(false);
+    const notifRef = useRef(null);
 
+    // Aplicar Modo Oscuro
     useEffect(() => {
         if (darkMode) {
             document.documentElement.classList.add('dark');
@@ -31,6 +38,66 @@ export const MainLayout = () => {
     useEffect(() => {
         setIsSidebarOpen(false);
     }, [location.pathname]);
+
+    // --- LÓGICA NOTIFICACIONES ---
+    const fetchNotificaciones = async () => {
+        try {
+            const res = await api.get('/notificaciones');
+            const data = res.data.data || [];
+            setNotificaciones(data);
+
+            // Verificar si hay algo más nuevo que la última vez que se abrió la campana
+            const lastSeen = localStorage.getItem('lastSeenNotif');
+            if (data.length > 0) {
+                // Tomamos la fecha más reciente de la lista (aunque estén ordenadas por prioridad, buscamos la más nueva)
+                const mostRecentDate = new Date(Math.max(...data.map(n => new Date(n.fecha))));
+                if (!lastSeen || mostRecentDate > new Date(lastSeen)) {
+                    setHasUnread(true);
+                }
+            }
+        } catch (error) {
+            console.error("Error cargando notificaciones", error);
+        }
+    };
+
+    useEffect(() => {
+        if (isAdmin) {
+            fetchNotificaciones();
+            const interval = setInterval(fetchNotificaciones, 300000);
+            return () => clearInterval(interval);
+        }
+    }, [isAdmin]);
+
+    // Cerrar panel si hace clic fuera
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (notifRef.current && !notifRef.current.contains(event.target)) {
+                setIsNotifOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const toggleNotifPanel = () => {
+        setIsNotifOpen(!isNotifOpen);
+        if (!isNotifOpen) {
+            // Al abrir, marcamos como leídas guardando la hora actual
+            localStorage.setItem('lastSeenNotif', new Date().toISOString());
+            setHasUnread(false);
+        }
+    };
+
+    const handleNotifClick = (ruta) => {
+        setIsNotifOpen(false);
+        navigate(ruta);
+    };
+
+    const getPriorityColor = (prioridad) => {
+        if (prioridad === 'Alta') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+        if (prioridad === 'Media') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+    };
 
     const getLinkStyles = (path) => {
         const isActive = location.pathname === path;
@@ -47,8 +114,10 @@ export const MainLayout = () => {
             5: "Mantenimiento", 6: "Logística", 7: "Industrialización", 8: "Ingeniería",
             9: "Compras", 10: "Gerencia", 11: "Almacén", 12: "Enfermería"
         };
-        return departamentos[id] || user?.rol; // Muestra el rol como respaldo si no encuentra el ID
+        return departamentos[id] || user?.rol; 
     };
+
+    const currentYear = new Date().getFullYear();
 
     return (
         <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
@@ -60,12 +129,13 @@ export const MainLayout = () => {
             )}
 
             <aside className={`fixed md:static inset-y-0 left-0 w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-30 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-                
                 <div className="p-6 border-b border-slate-200 dark:border-slate-800/60 flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-600/30">
-                            <PcCase size={24} className="text-white" />
-                        </div>
+                        <img 
+                            src={WitturLogo} 
+                            alt="Wittur Logo" 
+                            className="h-10 w-auto object-contain" 
+                        />
                         <div>
                             <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Wittur ICT</h2>
                             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Helpdesk & Monitor</p>
@@ -90,7 +160,6 @@ export const MainLayout = () => {
                         Gestión de Tickets
                     </Link>
 
-                    {/* Solo el Administrador puede ver y gestionar usuarios y exportar reportes */}
                     {isAdmin && (
                         <>
                             <Link to="/usuarios" className={getLinkStyles('/usuarios')}>
@@ -104,7 +173,6 @@ export const MainLayout = () => {
                         </>
                     )}
 
-                    {/* INFRAESTRUCTURA: Estrictamente para Administrador */}
                     {canViewInfraestructura && (
                         <>
                             <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Infraestructura</p>
@@ -119,7 +187,6 @@ export const MainLayout = () => {
                         </>
                     )}
 
-                    {/* SEGURIDAD: Para Administrador y Seguridad */}
                     {canViewSeguridad && (
                         <>
                             <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Seguridad</p>
@@ -155,7 +222,7 @@ export const MainLayout = () => {
                 </div>
             </aside>
 
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 <header className="sticky top-0 z-10 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 md:px-8 py-4 flex justify-between items-center transition-colors duration-300">
                     <div className="flex items-center gap-4">
                         <button 
@@ -169,19 +236,83 @@ export const MainLayout = () => {
                         </h1>
                     </div>
                     
-                    <button 
-                        onClick={() => setDarkMode(!darkMode)}
-                        className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2 rounded-full bg-slate-200/50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border border-slate-300/50 dark:border-slate-700"
-                    >
-                        {darkMode ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} className="text-indigo-500" />}
-                        <span className="hidden sm:inline">{darkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {/* CONTENEDOR NOTIFICACIONES - SOLO PARA ADMINISTRADORES */}
+                        {isAdmin && (
+                            <div className="relative" ref={notifRef}>
+                                <button 
+                                    onClick={toggleNotifPanel}
+                                    className="relative p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+                                >
+                                    <Bell size={20} />
+                                    {hasUnread && (
+                                        <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                                    )}
+                                </button>
+
+                                {/* DROPDOWN NOTIFICACIONES */}
+                                {isNotifOpen && (
+                                    <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden z-50">
+                                        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
+                                            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Notificaciones (7 Días)</h3>
+                                        </div>
+                                        <div className="max-h-96 overflow-y-auto">
+                                            {notificaciones.length === 0 ? (
+                                                <div className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                                                    No hay notificaciones recientes.
+                                                </div>
+                                            ) : (
+                                                notificaciones.map((notif) => (
+                                                    <button 
+                                                        key={notif.id}
+                                                        onClick={() => handleNotifClick(notif.ruta)}
+                                                        className="w-full text-left p-4 border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex flex-col gap-1"
+                                                    >
+                                                        <div className="flex justify-between items-start">
+                                                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{notif.titulo}</span>
+                                                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${getPriorityColor(notif.prioridad)}`}>
+                                                                {notif.prioridad}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{notif.descripcion}</p>
+                                                        <span className="text-[10px] text-slate-400 mt-1 block">
+                                                            {new Date(notif.fecha).toLocaleString()}
+                                                        </span>
+                                                    </button>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <button 
+                            onClick={() => setDarkMode(!darkMode)}
+                            className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2 rounded-full bg-slate-200/50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border border-slate-300/50 dark:border-slate-700"
+                        >
+                            {darkMode ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} className="text-indigo-500" />}
+                            <span className="hidden sm:inline">{darkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
+                        </button>
+                    </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-4 md:p-8">
+                <main className="flex-1 overflow-auto p-4 md:p-8">
                     <Outlet />
-                </div>
-            </main>
+                </main>
+
+                <footer className="mt-auto py-4 px-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 shrink-0">
+                    <div className="font-medium">
+                        &copy; {currentYear} Wittur México. Todos los derechos reservados.
+                    </div>
+                    
+                    <div className="flex items-center gap-3 mt-2 sm:mt-0 font-medium">
+                        <span>Departamento ICT</span>
+                        <span className="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
+                        <span>Versión 1.0.0</span>
+                    </div>
+                </footer>
+            </div>
         </div>
     );
 };
