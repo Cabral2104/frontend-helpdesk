@@ -47,27 +47,37 @@ export const Inventario = () => {
 
     // ================= FUNCIONES API INVENTARIO ================= //
 
-    const fetchEquipos = async () => {
+    const fetchEquipos = async (signal = null) => {
         setLoading(true);
         try {
-            // Agregamos el search a la URL
-            const response = await api.get(`/equipos?page=${currentPage}&search=${searchTerm}`);
+            const response = await api.get(
+                `/equipos?page=${currentPage}&search=${searchTerm}`,
+                signal ? { signal } : {}
+            );
             setEquipos(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
-            console.error("Error al cargar inventario:", error);
+            if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                console.error("Error al cargar inventario:", error);
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    // Efecto unificado con debounce para la búsqueda y paginación
+    // Efecto unificado con debounce para búsqueda, paginación inmediata y cancelación de peticiones
     useEffect(() => {
-        const delayDebounce = setTimeout(() => {
-            fetchEquipos();
-        }, 400);
+        const controller = new AbortController();
+        const delay = searchTerm ? 350 : 0;
 
-        return () => clearTimeout(delayDebounce);
+        const timeoutId = setTimeout(() => {
+            fetchEquipos(controller.signal);
+        }, delay);
+
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
     }, [searchTerm, currentPage]);
 
     const handleSearchChange = (e) => {

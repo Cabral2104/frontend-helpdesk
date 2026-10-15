@@ -5,6 +5,24 @@ import { LayoutDashboard, Ticket, PcCase, Cctv, LogOut, Sun, Moon, UserCircle, M
 import WitturLogo from '../assets/logo_wittur.png';
 import api from '../api/axios';
 
+// Precarga de módulos en hover para navegación instantánea a 60 FPS
+const prefetchMap = {
+    '/dashboard': () => import('../pages/Dashboard'),
+    '/tickets': () => import('../pages/Tickets'),
+    '/usuarios': () => import('../pages/Usuarios'),
+    '/exportar-reportes': () => import('../pages/Reportes'),
+    '/inventario': () => import('../pages/Inventario'),
+    '/cctv': () => import('../pages/Cctv'),
+    '/caseta': () => import('../pages/Caseta'),
+    '/reportes-seguridad': () => import('../pages/ReportesSeguridad'),
+};
+
+const handlePrefetch = (path) => {
+    if (prefetchMap[path]) {
+        prefetchMap[path]();
+    }
+};
+
 export const MainLayout = () => {
     const { user, logout } = useAuth();
     const location = useLocation();
@@ -151,22 +169,22 @@ export const MainLayout = () => {
                 
                 <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
                     <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-2">Principal</p>
-                    <Link to="/dashboard" className={getLinkStyles('/dashboard')}>
+                    <Link to="/dashboard" onMouseEnter={() => handlePrefetch('/dashboard')} className={getLinkStyles('/dashboard')}>
                         <LayoutDashboard size={18} />
                         Tablero
                     </Link>
-                    <Link to="/tickets" className={getLinkStyles('/tickets')}>
+                    <Link to="/tickets" onMouseEnter={() => handlePrefetch('/tickets')} className={getLinkStyles('/tickets')}>
                         <Ticket size={18} />
                         Gestión de Tickets
                     </Link>
 
                     {isAdmin && (
                         <>
-                            <Link to="/usuarios" className={getLinkStyles('/usuarios')}>
+                            <Link to="/usuarios" onMouseEnter={() => handlePrefetch('/usuarios')} className={getLinkStyles('/usuarios')}>
                                 <Users size={18} />
                                 Gestión de Usuarios
                             </Link>
-                            <Link to="/exportar-reportes" className={getLinkStyles('/exportar-reportes')}>
+                            <Link to="/exportar-reportes" onMouseEnter={() => handlePrefetch('/exportar-reportes')} className={getLinkStyles('/exportar-reportes')}>
                                 <Download size={18} />
                                 Exportar Datos
                             </Link>
@@ -176,11 +194,11 @@ export const MainLayout = () => {
                     {canViewInfraestructura && (
                         <>
                             <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Infraestructura</p>
-                            <Link to="/inventario" className={getLinkStyles('/inventario')}>
+                            <Link to="/inventario" onMouseEnter={() => handlePrefetch('/inventario')} className={getLinkStyles('/inventario')}>
                                 <PcCase size={18} />
                                 Inventario
                             </Link>
-                            <Link to="/cctv" className={getLinkStyles('/cctv')}>
+                            <Link to="/cctv" onMouseEnter={() => handlePrefetch('/cctv')} className={getLinkStyles('/cctv')}>
                                 <Cctv size={18} />
                                 Cámaras CCTV
                             </Link>
@@ -190,11 +208,11 @@ export const MainLayout = () => {
                     {canViewSeguridad && (
                         <>
                             <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6">Seguridad</p>
-                            <Link to="/caseta" className={getLinkStyles('/caseta')}>
+                            <Link to="/caseta" onMouseEnter={() => handlePrefetch('/caseta')} className={getLinkStyles('/caseta')}>
                                 <MonitorPlay size={18} />
                                 Monitor Caseta
                             </Link>
-                            <Link to="/reportes-seguridad" className={getLinkStyles('/reportes-seguridad')}>
+                            <Link to="/reportes-seguridad" onMouseEnter={() => handlePrefetch('/reportes-seguridad')} className={getLinkStyles('/reportes-seguridad')}>
                                 <ShieldAlert size={18} />
                                 Bitácora de Seguridad
                             </Link>

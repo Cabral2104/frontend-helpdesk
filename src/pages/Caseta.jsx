@@ -1,6 +1,64 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../api/axios';
 import { AlertTriangle, Video, X, Save, Camera, Maximize, Minimize, Filter } from 'lucide-react';
+
+// Subcomponente memoizado para aislar el iframe del stream y evitar re-renders cuando cambian modales
+const CameraCard = React.memo(({ camara, onOpenReport, onExpand }) => {
+    return (
+        <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-700 flex flex-col group relative">
+            {/* Área de Video WebRTC */}
+            <div className="aspect-video bg-black relative flex items-center justify-center">
+                {camara.stream_url && camara.stream_url !== 'N/A' ? (
+                    <iframe 
+                        src={camara.stream_url} 
+                        title={`Stream ${camara.nombre_camara}`}
+                        className="w-full h-full border-0 pointer-events-none"
+                        scrolling="no"
+                    />
+                ) : (
+                    <div className="text-slate-700 flex flex-col items-center">
+                        <Camera size={48} />
+                        <span className="text-xs mt-2">Señal no disponible</span>
+                    </div>
+                )}
+                
+                {/* Overlay de controles (Hover) */}
+                <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
+                    <div className="flex justify-end gap-2">
+                        <button 
+                            onClick={() => onOpenReport(camara.id)}
+                            className="bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg backdrop-blur-sm transition-colors cursor-pointer"
+                            title="Reportar incidencia"
+                        >
+                            <AlertTriangle size={18} />
+                        </button>
+                        <button 
+                            onClick={() => onExpand(camara)}
+                            className="bg-slate-800/80 hover:bg-slate-700 text-white p-2 rounded-lg backdrop-blur-sm transition-colors cursor-pointer"
+                            title="Expandir cámara"
+                        >
+                            <Maximize size={18} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Barra de estado inferior */}
+            <div className="p-3 bg-slate-800 flex justify-between items-center shrink-0">
+                <div className="truncate pr-2">
+                    <h4 className="text-sm font-bold text-white truncate">{camara.nombre_camara}</h4>
+                    <p className="text-xs text-slate-400 truncate">{camara.ubicacion}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+});
 
 export const Caseta = () => {
     const [camaras, setCamaras] = useState([]);
@@ -25,9 +83,10 @@ export const Caseta = () => {
 
     // 1. CARGAR CÁMARAS Y RECUPERAR MEMORIA
     useEffect(() => {
+        const controller = new AbortController();
         const fetchCamarasCaseta = async () => {
             try {
-                const response = await api.get('/cctv/caseta');
+                const response = await api.get('/cctv/caseta', { signal: controller.signal });
                 const fetchedCamaras = response.data.data || [];
                 setCamaras(fetchedCamaras);
                 
@@ -37,7 +96,6 @@ export const Caseta = () => {
                 if (seleccionGuardada) {
                     try {
                         const parsedIds = JSON.parse(seleccionGuardada);
-                        // Filtramos para asegurar que los IDs guardados sigan existiendo en la BD
                         const idsValidos = parsedIds.filter(id => fetchedCamaras.some(cam => cam.id === id));
                         
                         if (idsValidos.length > 0) {
@@ -49,16 +107,18 @@ export const Caseta = () => {
                         setCamarasSeleccionadas(fetchedCamaras.map(cam => cam.id));
                     }
                 } else {
-                    // Si es la primera vez que entra, encendemos todas por defecto
                     setCamarasSeleccionadas(fetchedCamaras.map(cam => cam.id));
                 }
             } catch (error) {
-                console.error("Error al cargar cámaras de caseta:", error);
+                if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                    console.error("Error al cargar cámaras de caseta:", error);
+                }
             } finally {
                 setLoading(false);
             }
         };
         fetchCamarasCaseta();
+        return () => controller.abort();
     }, []);
 
     // 2. GUARDAR EN MEMORIA CADA VEZ QUE CAMBIA LA SELECCIÓN
@@ -68,15 +128,15 @@ export const Caseta = () => {
         }
     }, [camarasSeleccionadas, loading, camaras]);
 
-    const toggleCamara = (id) => {
+    const toggleCamara = useCallback((id) => {
         setCamarasSeleccionadas(prev => 
             prev.includes(id) 
                 ? prev.filter(camId => camId !== id)
                 : [...prev, id]
         );
-    };
+    }, []);
 
-    const openReportModal = (camaraId = '') => {
+    const openReportModal = useCallback((camaraId = '') => {
         setReportData({
             camara_id: camaraId,
             tipo_incidente: 'Vehículo Sospechoso',
@@ -84,7 +144,7 @@ export const Caseta = () => {
             fecha_incidente: new Date().toISOString().slice(0, 16)
         });
         setIsReportModalOpen(true);
-    };
+    }, []);
 
     const handleReportSubmit = async (e) => {
         e.preventDefault();
@@ -100,6 +160,12 @@ export const Caseta = () => {
         }
     };
 
+    // Memoizamos el filtrado para evitar recalcular en cada tecla del formulario
+    const camarasVisibles = useMemo(() => {
+        const selectedSet = new Set(camarasSeleccionadas);
+        return camaras.filter(cam => selectedSet.has(cam.id));
+    }, [camaras, camarasSeleccionadas]);
+
     // LÓGICA ADAPTATIVA: Calculamos la cuadrícula en base a la cantidad seleccionada
     const getGridClass = () => {
         const count = camarasSeleccionadas.length;
@@ -113,7 +179,16 @@ export const Caseta = () => {
     };
 
     if (loading) {
-        return <div className="flex justify-center items-center h-64 text-slate-500">Conectando con infraestructura CCTV...</div>;
+        return (
+            <div className="space-y-4 animate-pulse">
+                <div className="h-18 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800"></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <div key={i} className="aspect-video bg-slate-200 dark:bg-slate-800 rounded-xl"></div>
+                    ))}
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -178,65 +253,18 @@ export const Caseta = () => {
 
             {/* Cuadrícula Dinámica de Cámaras Adaptativa */}
             <div className={`grid gap-4 transition-all duration-300 ease-in-out ${getGridClass()}`}>
-                {camarasSeleccionadas.length === 0 ? (
+                {camarasVisibles.length === 0 ? (
                     <div className="col-span-full p-8 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
                         No hay cámaras seleccionadas. Abre el filtro para visualizar.
                     </div>
                 ) : (
-                    camaras.filter(cam => camarasSeleccionadas.includes(cam.id)).map((camara) => (
-                        <div key={camara.id} className="bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-700 flex flex-col group relative">
-                            
-                            {/* Área de Video WebRTC */}
-                            <div className="aspect-video bg-black relative flex items-center justify-center">
-                                {camara.stream_url && camara.stream_url !== 'N/A' ? (
-                                    <iframe 
-                                        src={camara.stream_url} 
-                                        title={`Stream ${camara.nombre_camara}`}
-                                        className="w-full h-full border-0 pointer-events-none"
-                                        scrolling="no"
-                                    ></iframe>
-                                ) : (
-                                    <div className="text-slate-700 flex flex-col items-center">
-                                        <Camera size={48} />
-                                        <span className="text-xs mt-2">Señal no disponible</span>
-                                    </div>
-                                )}
-                                
-                                {/* Overlay de controles (Hover) */}
-                                <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
-                                    <div className="flex justify-end gap-2">
-                                        <button 
-                                            onClick={() => openReportModal(camara.id)}
-                                            className="bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg backdrop-blur-sm transition-colors"
-                                            title="Reportar incidencia"
-                                        >
-                                            <AlertTriangle size={18} />
-                                        </button>
-                                        <button 
-                                            onClick={() => setExpandedCam(camara)}
-                                            className="bg-slate-800/80 hover:bg-slate-700 text-white p-2 rounded-lg backdrop-blur-sm transition-colors"
-                                            title="Expandir cámara"
-                                        >
-                                            <Maximize size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {/* Barra de estado inferior */}
-                            <div className="p-3 bg-slate-800 flex justify-between items-center shrink-0">
-                                <div className="truncate pr-2">
-                                    <h4 className="text-sm font-bold text-white truncate">{camara.nombre_camara}</h4>
-                                    <p className="text-xs text-slate-400 truncate">{camara.ubicacion}</p>
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className="relative flex h-2.5 w-2.5">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+                    camarasVisibles.map((camara) => (
+                        <CameraCard 
+                            key={camara.id}
+                            camara={camara}
+                            onOpenReport={openReportModal}
+                            onExpand={setExpandedCam}
+                        />
                     ))
                 )}
             </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { ShieldAlert, Search, RefreshCw, Pencil, Trash2, X, Save, UserCircle, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getCached } from '../api/cache';
 
 export const ReportesSeguridad = () => {
     const { user } = useAuth();
@@ -44,8 +45,8 @@ export const ReportesSeguridad = () => {
 
     const fetchCamaras = async () => {
         try {
-            const response = await api.get('/cctv');
-            setCamaras(response.data.data || []);
+            const data = await getCached('/cctv/catalogo?solo_caseta=1');
+            setCamaras(data.data || []);
         } catch (error) {
             console.error("Error al cargar cámaras:", error);
         }

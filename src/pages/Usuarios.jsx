@@ -34,27 +34,37 @@ export const Usuarios = () => {
         { id: 11, nombre: "Almacén" }, { id: 12, nombre: "Enfermería" }
     ];
 
-    const fetchUsuarios = async () => {
+    const fetchUsuarios = async (signal = null) => {
         setLoading(true);
         try {
-            // Agregamos el search a la URL
-            const response = await api.get(`/usuarios?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`);
+            const response = await api.get(
+                `/usuarios?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`,
+                signal ? { signal } : {}
+            );
             setUsuarios(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
-            console.error("Error al cargar usuarios:", error);
+            if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                console.error("Error al cargar usuarios:", error);
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    // Efecto unificado con debounce para la búsqueda y paginación
+    // Efecto unificado con debounce para búsqueda, paginación inmediata y cancelación de peticiones
     useEffect(() => {
-        const delayDebounce = setTimeout(() => {
-            fetchUsuarios();
-        }, 400); // 400ms de retraso para no saturar la BD
+        const controller = new AbortController();
+        const delay = searchTerm ? 350 : 0;
 
-        return () => clearTimeout(delayDebounce);
+        const timeoutId = setTimeout(() => {
+            fetchUsuarios(controller.signal);
+        }, delay);
+
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
     }, [searchTerm, currentPage, sortOrder]);
 
     const handleSearchChange = (e) => {

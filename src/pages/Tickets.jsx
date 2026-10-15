@@ -3,6 +3,8 @@ import api from '../api/axios';
 import { Plus, Search, Eye, RefreshCw, X, Save, CheckCircle, Pencil, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+import { getCached } from '../api/cache';
+
 export const Tickets = () => {
     const { user } = useAuth();
     const isAdmin = user?.rol === 'Administrador';
@@ -33,27 +35,38 @@ export const Tickets = () => {
 
     // ================= FUNCIONES API ================= //
 
-    const fetchTickets = async () => {
+    const fetchTickets = async (signal = null) => {
         setLoading(true);
         try {
-            // Se agregaron los parámetros de búsqueda y categoría a la URL
-            const response = await api.get(`/tickets?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}&categoria_id=${filterCategory}`);
+            const response = await api.get(
+                `/tickets?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}&categoria_id=${filterCategory}`,
+                signal ? { signal } : {}
+            );
             setTickets(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
         } catch (error) {
-            console.error("Error al cargar los tickets:", error);
+            if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                console.error("Error al cargar los tickets:", error);
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    // Efecto unificado con debounce para la búsqueda y filtros
+    // Efecto unificado: búsqueda con debounce, paginación/filtros inmediatos y cancelación de peticiones en vuelo
     useEffect(() => {
-        const delayDebounce = setTimeout(() => {
-            fetchTickets();
-        }, 400);
+        const controller = new AbortController();
 
-        return () => clearTimeout(delayDebounce);
+        // Si el usuario está tecleando texto aplicamos 350ms; si es paginación o filtro, petición inmediata (0ms)
+        const delay = searchTerm ? 350 : 0;
+        const timeoutId = setTimeout(() => {
+            fetchTickets(controller.signal);
+        }, delay);
+
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
     }, [searchTerm, filterCategory, sortOrder, currentPage]);
 
     const handleSearchChange = (e) => {
@@ -69,12 +82,12 @@ export const Tickets = () => {
     useEffect(() => {
         const fetchCategorias = async () => {
             try {
-                const response = await api.get('/categorias-incidencias');
-                if (response.data.success) {
-                    setCategorias(response.data.data);
+                const data = await getCached('/categorias-incidencias');
+                if (data.success) {
+                    setCategorias(data.data);
                 }
             } catch (error) {
-            console.error("Error al cargar las categorías:", error);
+                console.error("Error al cargar las categorías:", error);
             }
         };
         fetchCategorias();

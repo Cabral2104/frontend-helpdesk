@@ -33,21 +33,41 @@ export const Dashboard = () => {
     if (isSeguridad) subtituloHeader = 'Resumen del estado de tus reportes de seguridad en caseta.';
 
     useEffect(() => {
+        const controller = new AbortController();
         const fetchMetrics = async () => {
             try {
-                const response = await api.get('/dashboard/metricas');
+                const response = await api.get('/dashboard/metricas', { signal: controller.signal });
                 setDashboardData(response.data.data);
             } catch (error) {
-                console.error("Error al cargar métricas:", error);
+                if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                    console.error("Error al cargar métricas:", error);
+                }
             } finally {
                 setLoading(false);
             }
         };
         fetchMetrics();
+        return () => controller.abort();
     }, []);
 
     if (loading) {
-        return <div className="flex justify-center items-center h-64 text-slate-500">Cargando métricas operativas...</div>;
+        return (
+            <div className="space-y-6 animate-pulse">
+                <div>
+                    <div className="h-7 w-48 bg-slate-200 dark:bg-slate-800 rounded-lg mb-2"></div>
+                    <div className="h-4 w-72 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="h-28 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800"></div>
+                    ))}
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="h-80 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800"></div>
+                    <div className="h-80 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800"></div>
+                </div>
+            </div>
+        );
     }
 
     // Colores para la gráfica circular (Incluye los estatus de TI y los de Seguridad)

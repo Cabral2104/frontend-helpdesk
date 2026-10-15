@@ -1,28 +1,25 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useMemo, useCallback } from 'react';
 import api from '../api/axios';
 
 // 1. Inicializamos el contexto
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-    // 2. Definimos los estados globales de la sesión
-    const [user, setUser] = useState(null);
-    const [token, setToken] = useState(localStorage.getItem('token') || null);
-    const [loading, setLoading] = useState(true);
-
-    // 3. Al recargar la página, verificamos si ya había una sesión guardada
-    useEffect(() => {
-        if (token) {
+    // 2. Inicialización perezosa de la sesión sin renders dobles
+    const [token, setToken] = useState(() => localStorage.getItem('token') || null);
+    const [user, setUser] = useState(() => {
+        try {
             const savedUser = localStorage.getItem('user');
-            if (savedUser) {
-                setUser(JSON.parse(savedUser));
-            }
+            return savedUser ? JSON.parse(savedUser) : null;
+        } catch (e) {
+            console.error("Error al leer sesión almacenada:", e);
+            return null;
         }
-        setLoading(false);
-    }, [token]);
+    });
+    const [loading, setLoading] = useState(false);
 
-    // 4. Función centralizada para iniciar sesión
-    const login = async (numero_nomina) => {
+    // 3. Función centralizada para iniciar sesión (memoizada)
+    const login = useCallback(async (numero_nomina) => {
         try {
             const response = await api.post('/login', { numero_nomina });
             
@@ -44,10 +41,10 @@ export const AuthProvider = ({ children }) => {
                 message: error.response?.data?.message || 'Error al conectar con el servidor.'
             };
         }
-    };
+    }, []);
 
-    // 5. Función centralizada para cerrar sesión
-    const logout = async () => {
+    // 4. Función centralizada para cerrar sesión (memoizada)
+    const logout = useCallback(async () => {
         try {
             if (token) {
                 await api.post('/logout'); // Le avisamos a Laravel que destruya el token
@@ -61,10 +58,19 @@ export const AuthProvider = ({ children }) => {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
         }
-    };
+    }, [token]);
+
+    // 5. Memoizamos el valor del contexto para evitar re-renders en cascada de los consumidores
+    const contextValue = useMemo(() => ({
+        user,
+        token,
+        login,
+        logout,
+        loading
+    }), [user, token, login, logout, loading]);
 
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+        <AuthContext.Provider value={contextValue}>
             {children}
         </AuthContext.Provider>
     );
