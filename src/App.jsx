@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Code-splitting con lazy loading para aligerar el bundle inicial (Recharts, CCTV, Inventario)
@@ -18,8 +19,8 @@ const ReportesSeguridad = lazy(() => import('./pages/ReportesSeguridad').then(m 
 const PageLoader = () => (
     <div className="flex min-h-[60vh] w-full items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-            <div className="h-9 w-9 animate-spin rounded-full border-3 border-blue-600 border-t-transparent"></div>
-            <span className="text-xs font-medium text-slate-400">Cargando módulo...</span>
+            <div className="h-9 w-9 animate-spin rounded-full border-3 border-[#009ba4] border-t-transparent shadow-xs"></div>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Cargando módulo...</span>
         </div>
     </div>
 );
@@ -34,11 +35,21 @@ const RequireRole = ({ children, allowedRoles }) => {
 };
 
 function App() {
+  // Sincronización global del tema guardado al cargar la aplicación
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
+      <NotificationProvider>
+        <BrowserRouter>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
             
             <Route path="/login" element={<Login />} />
 
@@ -85,6 +96,7 @@ function App() {
           </Routes>
         </Suspense>
       </BrowserRouter>
+      </NotificationProvider>
     </AuthProvider>
   );
 }
