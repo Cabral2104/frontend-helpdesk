@@ -55,9 +55,10 @@ export const Usuarios = () => {
     const fetchUsuarios = async (signal = null) => {
         setLoading(true);
         try {
+            const isSignal = signal && typeof signal.addEventListener === 'function';
             const response = await api.get(
                 `/usuarios?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`,
-                signal ? { signal } : {}
+                isSignal ? { signal } : {}
             );
             setUsuarios(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);

@@ -47,9 +47,10 @@ export const Tickets = () => {
     const fetchTickets = async (signal = null) => {
         setLoading(true);
         try {
+            const isSignal = signal && typeof signal.addEventListener === 'function';
             const response = await api.get(
                 `/tickets?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}&categoria_id=${filterCategory}`,
-                signal ? { signal } : {}
+                isSignal ? { signal } : {}
             );
             setTickets(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);

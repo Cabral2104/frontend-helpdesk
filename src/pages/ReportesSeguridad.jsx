@@ -40,15 +40,21 @@ export const ReportesSeguridad = () => {
         estatus: 'Pendiente'
     });
 
-    const fetchReportes = async () => {
+    const fetchReportes = async (signal = null) => {
         setLoading(true);
         try {
-            const response = await api.get(`/reportes-seguridad?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`);
+            const isSignal = signal && typeof signal.addEventListener === 'function';
+            const response = await api.get(
+                `/reportes-seguridad?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`,
+                isSignal ? { signal } : {}
+            );
             setReportes(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
             setTotalReportes(response.data.meta?.total || (response.data.data ? response.data.data.length : 0));
         } catch (error) {
-            console.error("Error al cargar reportes:", error);
+            if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                console.error("Error al cargar reportes:", error);
+            }
         } finally {
             setLoading(false);
         }
@@ -65,10 +71,16 @@ export const ReportesSeguridad = () => {
     };
 
     useEffect(() => {
+        const controller = new AbortController();
+        const delay = searchTerm ? 350 : 0;
         const delayDebounce = setTimeout(() => {
-            fetchReportes();
-        }, 350);
-        return () => clearTimeout(delayDebounce);
+            fetchReportes(controller.signal);
+        }, delay);
+
+        return () => {
+            clearTimeout(delayDebounce);
+            controller.abort();
+        };
     }, [searchTerm, currentPage, sortOrder]);
 
     useEffect(() => {

@@ -91,10 +91,18 @@ export const MainLayout = () => {
         setIsSidebarOpen(false);
     }, [location.pathname]);
 
-    // --- LÓGICA NOTIFICACIONES ---
-    const fetchNotificaciones = async () => {
+    // --- LÓGICA NOTIFICACIONES (OPTIMIZADA CON SEMÁFORO Y DETECCIÓN DE PESTAÑA OCULTA) ---
+    const isFetchingNotifRef = useRef(false);
+    const lastFetchTimeRef = useRef(0);
+
+    const fetchNotificaciones = async (signal = null) => {
+        // Semáforo booleano: evita consultas acumuladas o concurrentes en cola
+        if (isFetchingNotifRef.current) return;
+        isFetchingNotifRef.current = true;
+
         try {
-            const res = await api.get('/notificaciones');
+            const res = await api.get('/notificaciones', signal ? { signal } : {});
+            lastFetchTimeRef.current = Date.now();
             const data = res.data.data || [];
             setNotificaciones(data);
 
@@ -106,16 +114,44 @@ export const MainLayout = () => {
                 }
             }
         } catch (error) {
-            console.error("Error cargando notificaciones", error);
+            if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                console.error("Error cargando notificaciones", error);
+            }
+        } finally {
+            isFetchingNotifRef.current = false;
         }
     };
 
     useEffect(() => {
-        if (isAdmin) {
-            fetchNotificaciones();
-            const interval = setInterval(fetchNotificaciones, 300000);
-            return () => clearInterval(interval);
-        }
+        if (!isAdmin) return;
+
+        const controller = new AbortController();
+        fetchNotificaciones(controller.signal);
+
+        // Sondeo cada 5 min únicamente si la pestaña está activa y visible
+        const interval = setInterval(() => {
+            if (!document.hidden) {
+                fetchNotificaciones(controller.signal);
+            }
+        }, 300000);
+
+        // Al volver el usuario a la pestaña, refresca si transcurrieron más de 5 min
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                const now = Date.now();
+                if (now - lastFetchTimeRef.current >= 300000) {
+                    fetchNotificaciones(controller.signal);
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            controller.abort();
+        };
     }, [isAdmin]);
 
     // Cerrar panel si hace clic fuera

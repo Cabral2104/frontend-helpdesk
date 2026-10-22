@@ -62,9 +62,10 @@ export const Inventario = () => {
     const fetchEquipos = async (signal = null) => {
         setLoading(true);
         try {
+            const isSignal = signal && typeof signal.addEventListener === 'function';
             const response = await api.get(
                 `/equipos?page=${currentPage}&search=${searchTerm}`,
-                signal ? { signal } : {}
+                isSignal ? { signal } : {}
             );
             setEquipos(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);

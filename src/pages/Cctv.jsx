@@ -44,15 +44,22 @@ export const Cctv = () => {
         visible_en_caseta: 0
     });
 
-    const fetchCamaras = async () => {
+    const fetchCamaras = async (signal = null) => {
         setLoading(true);
         setFetchError(null);
         try {
-            const response = await api.get(`/cctv?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`);
+            const isSignal = signal && typeof signal.addEventListener === 'function';
+            const response = await api.get(
+                `/cctv?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`,
+                isSignal ? { signal } : {}
+            );
             setCamaras(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
             setTotalCamaras(response.data.meta?.total || (response.data.data ? response.data.data.length : 0));
         } catch (error) {
+            if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+                return;
+            }
             console.error("Error al cargar cámaras:", error);
             if (error.code === 'ECONNABORTED' || !error.response) {
                 setFetchError("No se pudo conectar con el servidor o la base de datos MySQL en XAMPP. Asegúrate de que MySQL esté iniciado.");
@@ -67,12 +74,16 @@ export const Cctv = () => {
     };
 
     useEffect(() => {
+        const controller = new AbortController();
         const delay = searchTerm ? 350 : 0;
         const delayDebounce = setTimeout(() => {
-            fetchCamaras();
+            fetchCamaras(controller.signal);
         }, delay);
 
-        return () => clearTimeout(delayDebounce);
+        return () => {
+            clearTimeout(delayDebounce);
+            controller.abort();
+        };
     }, [searchTerm, currentPage, sortOrder]);
 
     const handleSearchChange = (e) => {
