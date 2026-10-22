@@ -1,14 +1,26 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Users, Search, RefreshCw, Pencil, Trash2, X, Save, UserPlus } from 'lucide-react';
+import { 
+    Users, Search, RefreshCw, Pencil, Trash2, Save, 
+    UserPlus, ArrowUpDown, UserCircle, Shield, Briefcase
+} from 'lucide-react';
+import { getCached } from '../api/cache';
+import { useNotification } from '../context/NotificationContext';
+import { Badge } from '../components/Badge';
+import { Modal } from '../components/Modal';
+import { Pagination } from '../components/Pagination';
+import { EmptyState } from '../components/EmptyState';
 
 export const Usuarios = () => {
+    const { toast, confirm } = useNotification();
     const [usuarios, setUsuarios] = useState([]);
+    const [departamentos, setDepartamentos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [totalUsuarios, setTotalUsuarios] = useState(0);
     const [sortOrder, setSortOrder] = useState('desc');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -19,52 +31,76 @@ export const Usuarios = () => {
         id: null,
         numero_nomina: '',
         nombre_completo: '',
-        departamento_id: 1, // ICT por defecto
-        rol: 'Operador'     // Rol por defecto
+        departamento_id: 1,
+        rol: 'Operador'
     });
 
     const rolesDisponibles = ["Administrador", "Operador", "Seguridad", "Administrativo"];
 
-    const departamentosDisponibles = [
-        { id: 1, nombre: "ICT / Sistemas" }, { id: 2, nombre: "Recursos Humanos" },
-        { id: 3, nombre: "Producción" }, { id: 4, nombre: "Calidad" },
-        { id: 5, nombre: "Mantenimiento" }, { id: 6, nombre: "Logística" },
-        { id: 7, nombre: "Industrialización" }, { id: 8, nombre: "Ingeniería" },
-        { id: 9, nombre: "Compras" }, { id: 10, nombre: "Gerencia" },
-        { id: 11, nombre: "Almacén" }, { id: 12, nombre: "Enfermería" }
-    ];
+    // Cargar departamentos desde la API con caché
+    useEffect(() => {
+        const fetchDepartamentos = async () => {
+            try {
+                const res = await getCached('/departamentos');
+                if (res && res.data) {
+                    setDepartamentos(res.data);
+                }
+            } catch (error) {
+                console.error("Error al cargar departamentos:", error);
+            }
+        };
+        fetchDepartamentos();
+    }, []);
 
-    const fetchUsuarios = async () => {
+    const fetchUsuarios = async (signal = null) => {
         setLoading(true);
         try {
-            // Agregamos el search a la URL
-            const response = await api.get(`/usuarios?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`);
+            const isSignal = signal && typeof signal.addEventListener === 'function';
+            const response = await api.get(
+                `/usuarios?page=${currentPage}&sort_by=date_created&sort_order=${sortOrder}&search=${searchTerm}`,
+                isSignal ? { signal } : {}
+            );
             setUsuarios(response.data.data || []);
             setTotalPages(response.data.meta?.last_page || 1);
+            setTotalUsuarios(response.data.meta?.total || (response.data.data ? response.data.data.length : 0));
         } catch (error) {
-            console.error("Error al cargar usuarios:", error);
+            if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                console.error("Error al cargar usuarios:", error);
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    // Efecto unificado con debounce para la búsqueda y paginación
     useEffect(() => {
-        const delayDebounce = setTimeout(() => {
-            fetchUsuarios();
-        }, 400); // 400ms de retraso para no saturar la BD
+        const controller = new AbortController();
+        const delay = searchTerm ? 350 : 0;
 
-        return () => clearTimeout(delayDebounce);
+        const timeoutId = setTimeout(() => {
+            fetchUsuarios(controller.signal);
+        }, delay);
+
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
     }, [searchTerm, currentPage, sortOrder]);
 
     const handleSearchChange = (e) => {
         setSearchTerm(e.target.value);
-        setCurrentPage(1); // Regresamos a la página 1 cuando el usuario busca algo nuevo
+        setCurrentPage(1);
     };
 
     const openCreateModal = () => {
         setEditMode(false);
-        setFormData({ id: null, numero_nomina: '', nombre_completo: '', departamento_id: 1, rol: 'Operador' });
+        const defaultDeptoId = departamentos.length > 0 ? departamentos[0].id : 1;
+        setFormData({ 
+            id: null, 
+            numero_nomina: '', 
+            nombre_completo: '', 
+            departamento_id: defaultDeptoId, 
+            rol: 'Operador' 
+        });
         setIsModalOpen(true);
     };
 
@@ -80,99 +116,185 @@ export const Usuarios = () => {
         try {
             if (editMode) {
                 await api.put(`/usuarios/${formData.id}`, formData);
+                toast.success("Información del colaborador actualizada correctamente.");
             } else {
                 await api.post('/usuarios', formData);
                 setCurrentPage(1);
+                toast.success("Nuevo colaborador registrado en el sistema.");
             }
-            setIsModalOpen(false);
+            setIsModalOpen(false); // Cierra el modal inmediatamente
             fetchUsuarios();
         } catch (error) {
-            alert(error.response?.data?.message || "Ocurrió un error al guardar el usuario.");
+            toast.error(error.response?.data?.message || "Ocurrió un error al guardar el usuario.");
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('¿Estás seguro de dar de baja a este usuario? Ya no podrá acceder al sistema.')) return;
+        const confirmed = await confirm({
+            title: "¿Dar de baja colaborador?",
+            message: "¿Estás seguro de dar de baja a este colaborador? Su acceso quedará deshabilitado en el sistema.",
+            confirmText: "Sí, dar de baja",
+            cancelText: "Cancelar",
+            variant: "rose"
+        });
+
+        if (!confirmed) return;
+
         try {
             await api.delete(`/usuarios/${id}`);
             fetchUsuarios();
+            toast.success("Colaborador dado de baja correctamente.");
         } catch (error) {
-            alert("Error al dar de baja al usuario.");
+            toast.error("Error al dar de baja al usuario.");
         }
     };
 
     const getDepartamentoNombre = (id) => {
-        const depto = departamentosDisponibles.find(d => d.id === parseInt(id));
-        return depto ? depto.nombre : `ID: ${id}`;
+        const depto = departamentos.find(d => d.id === parseInt(id));
+        return depto ? depto.nombre : `Departamento #${id}`;
+    };
+
+    const getRoleBadgeVariant = (rol) => {
+        switch (rol) {
+            case 'Administrador': return 'teal';
+            case 'Seguridad': return 'amber';
+            case 'Administrativo': return 'blue';
+            case 'Operador':
+            default: return 'gray';
+        }
     };
 
     return (
-        <div className="space-y-6 relative">
+        <div className="space-y-6 relative font-sans">
+            {/* CABECERA */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Users size={28} className="text-blue-600" />
-                        Gestión de Usuarios
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+                        <Users size={24} className="text-[#009ba4]" />
+                        <span>Administración de Usuarios y Accesos</span>
                     </h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        Administración de accesos, roles y personal del sistema.
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Control de credenciales por nómina, asignación de áreas departamentales y permisos de rol.
                     </p>
                 </div>
-                <button onClick={openCreateModal} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold shadow-sm transition-colors">
-                    <UserPlus size={18} /><span>Nuevo Usuario</span>
+                <button 
+                    onClick={openCreateModal} 
+                    className="inline-flex items-center gap-2 bg-[#009ba4] hover:bg-[#007e86] text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-[#009ba4]/25 transition-all cursor-pointer"
+                >
+                    <UserPlus size={16} />
+                    <span>Nuevo Usuario</span>
                 </button>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50">
-                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
-                        <div className="relative w-full sm:w-72">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            {/* CONTENEDOR TABLA */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl shadow-xs overflow-hidden">
+                <div className="p-4 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-slate-50/60 dark:bg-slate-900/40">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
+                        <div className="relative flex-1 sm:max-w-xs">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input 
-                                type="text" placeholder="Buscar por nómina, nombre o rol..." 
-                                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                type="text" 
+                                placeholder="Buscar nómina, nombre o rol..." 
+                                className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-[#009ba4] outline-none"
                                 value={searchTerm} 
                                 onChange={handleSearchChange}
                             />
                         </div>
+
+                        <button
+                            onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:border-[#009ba4] transition-all"
+                        >
+                            <ArrowUpDown size={14} className="text-[#009ba4]" />
+                            <span>{sortOrder === 'desc' ? 'Recientes' : 'Antiguos'}</span>
+                        </button>
                     </div>
-                    <button onClick={fetchUsuarios} className="p-2 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+
+                    <button 
+                        onClick={() => fetchUsuarios()} 
+                        className="p-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-[#009ba4] hover:border-[#009ba4] transition-all bg-white dark:bg-slate-800 self-end sm:self-auto"
+                        title="Actualizar listado"
+                    >
+                        <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
                     </button>
                 </div>
 
+                {/* TABLA DE USUARIOS */}
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-200">
+                    <table className="w-full text-left border-collapse min-w-[700px]">
                         <thead>
-                            <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
-                                <th className="p-4 font-semibold">Nómina</th>
-                                <th className="p-4 font-semibold">Nombre Completo</th>
-                                <th className="p-4 font-semibold">Departamento</th>
-                                <th className="p-4 font-semibold">Rol (Acceso)</th>
-                                <th className="p-4 font-semibold text-right">Acciones</th>
+                            <tr className="bg-slate-50/80 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800/80">
+                                <th className="py-3.5 px-4">Nómina</th>
+                                <th className="py-3.5 px-4">Nombre Completo</th>
+                                <th className="py-3.5 px-4">Departamento</th>
+                                <th className="py-3.5 px-4">Rol de Acceso</th>
+                                <th className="py-3.5 px-4 text-right">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                             {loading ? (
-                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">Cargando usuarios...</td></tr>
+                                <tr>
+                                    <td colSpan={5} className="p-12 text-center">
+                                        <div className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400">
+                                            <div className="h-4 w-4 border-2 border-[#009ba4] border-t-transparent rounded-full animate-spin" />
+                                            <span>Consultando catálogo de usuarios...</span>
+                                        </div>
+                                    </td>
+                                </tr>
                             ) : usuarios.length === 0 ? (
-                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">No se encontraron usuarios.</td></tr>
+                                <tr>
+                                    <td colSpan={5} className="p-4">
+                                        <EmptyState 
+                                            title="No se encontraron usuarios"
+                                            description="No hay colaboradores que coincidan con la búsqueda."
+                                        />
+                                    </td>
+                                </tr>
                             ) : (
                                 usuarios.map((u) => (
-                                    <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                        <td className="p-4 text-sm font-bold text-slate-900 dark:text-white">{u.numero_nomina}</td>
-                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-medium">{u.nombre_completo}</td>
-                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-300">{getDepartamentoNombre(u.departamento_id)}</td>
-                                        <td className="p-4 text-sm font-semibold text-blue-600 dark:text-blue-400">{u.rol}</td>
-                                        <td className="p-4">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => openEditModal(u)} className="text-amber-600 hover:text-amber-800 dark:text-amber-400 p-1" title="Editar">
-                                                    <Pencil size={18} />
+                                    <tr key={u.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                                        <td className="py-3.5 px-4">
+                                            <span className="font-mono text-xs font-bold text-[#009ba4] dark:text-[#2ec0c7] bg-[#009ba4]/10 px-2.5 py-1 rounded-lg">
+                                                {u.numero_nomina}
+                                            </span>
+                                        </td>
+                                        <td className="py-3.5 px-4">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs shrink-0">
+                                                    {u.nombre_completo ? u.nombre_completo.charAt(0).toUpperCase() : 'U'}
+                                                </div>
+                                                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                                    {u.nombre_completo}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="py-3.5 px-4">
+                                            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                {getDepartamentoNombre(u.departamento_id)}
+                                            </span>
+                                        </td>
+                                        <td className="py-3.5 px-4">
+                                            <Badge variant={getRoleBadgeVariant(u.rol)} size="xs">
+                                                {u.rol}
+                                            </Badge>
+                                        </td>
+                                        <td className="py-3.5 px-4 text-right">
+                                            <div className="flex items-center justify-end gap-1.5">
+                                                <button 
+                                                    onClick={() => openEditModal(u)} 
+                                                    className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors cursor-pointer" 
+                                                    title="Editar Usuario"
+                                                >
+                                                    <Pencil size={15} />
                                                 </button>
-                                                <button onClick={() => handleDelete(u.id)} className="text-red-600 hover:text-red-800 dark:text-red-400 p-1" title="Dar de baja">
-                                                    <Trash2 size={18} />
+                                                <button 
+                                                    onClick={() => handleDelete(u.id)} 
+                                                    className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer" 
+                                                    title="Dar de Baja"
+                                                >
+                                                    <Trash2 size={15} />
                                                 </button>
                                             </div>
                                         </td>
@@ -183,65 +305,103 @@ export const Usuarios = () => {
                     </table>
                 </div>
 
-                {!loading && usuarios.length > 0 && (
-                    <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                        <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">Anterior</button>
-                        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Página {currentPage} de {totalPages}</span>
-                        <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-50 text-sm font-semibold hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">Siguiente</button>
-                    </div>
-                )}
+                {/* PAGINACIÓN */}
+                <Pagination 
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={totalUsuarios}
+                    onPageChange={(page) => setCurrentPage(page)}
+                />
             </div>
 
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                                {editMode ? 'Editar Usuario' : 'Registrar Nuevo Usuario'}
-                            </h3>
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-                        </div>
-
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Número de Nómina</label>
-                                <input required type="text" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.numero_nomina} onChange={(e) => setFormData({...formData, numero_nomina: e.target.value})} />
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Nombre Completo</label>
-                                <input required type="text" className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.nombre_completo} onChange={(e) => setFormData({...formData, nombre_completo: e.target.value})} />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Departamento</label>
-                                    <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.departamento_id} onChange={(e) => setFormData({...formData, departamento_id: parseInt(e.target.value)})}>
-                                        {departamentosDisponibles.map(d => (
-                                            <option key={d.id} value={d.id}>{d.nombre}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Rol de Acceso</label>
-                                    <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.rol} onChange={(e) => setFormData({...formData, rol: e.target.value})}>
-                                        {rolesDisponibles.map(r => (
-                                            <option key={r} value={r}>{r}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="pt-4 flex gap-3 justify-end">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancelar</button>
-                                <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold">
-                                    <Save size={18} /><span>{editMode ? 'Actualizar' : 'Guardar'}</span>
-                                </button>
-                            </div>
-                        </form>
+            {/* MODAL: Crear / Editar Usuario */}
+            <Modal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title={editMode ? 'Editar Colaborador' : 'Registrar Nuevo Usuario'}
+                subtitle="Asigna número de nómina, departamento y nivel de acceso en el sistema."
+                icon={UserPlus}
+                maxWidth="max-w-lg"
+            >
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                            Número de Nómina
+                        </label>
+                        <input 
+                            required 
+                            type="text" 
+                            placeholder="Ej. ICT001 o NÓMINA"
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono font-medium focus:ring-2 focus:ring-[#009ba4] outline-none" 
+                            value={formData.numero_nomina} 
+                            onChange={(e) => setFormData({...formData, numero_nomina: e.target.value})} 
+                        />
                     </div>
-                </div>
-            )}
+                    
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                            Nombre Completo
+                        </label>
+                        <input 
+                            required 
+                            type="text" 
+                            placeholder="Ej. Juan Pérez García"
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-[#009ba4] outline-none" 
+                            value={formData.nombre_completo} 
+                            onChange={(e) => setFormData({...formData, nombre_completo: e.target.value})} 
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                Departamento
+                            </label>
+                            <select 
+                                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-[#009ba4] outline-none" 
+                                value={formData.departamento_id} 
+                                onChange={(e) => setFormData({...formData, departamento_id: parseInt(e.target.value)})}
+                            >
+                                {departamentos.map(d => (
+                                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                Rol de Acceso
+                            </label>
+                            <select 
+                                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-[#009ba4] outline-none" 
+                                value={formData.rol} 
+                                onChange={(e) => setFormData({...formData, rol: e.target.value})}
+                            >
+                                {rolesDisponibles.map(r => (
+                                    <option key={r} value={r}>{r}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="pt-4 flex gap-3 justify-end border-t border-slate-200 dark:border-slate-800">
+                        <button 
+                            type="button" 
+                            onClick={() => setIsModalOpen(false)} 
+                            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            type="submit" 
+                            disabled={isSubmitting} 
+                            className="inline-flex items-center gap-2 bg-[#009ba4] hover:bg-[#007e86] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md shadow-[#009ba4]/25 transition-all cursor-pointer"
+                        >
+                            <Save size={15} />
+                            <span>{editMode ? 'Actualizar Usuario' : 'Registrar Usuario'}</span>
+                        </button>
+                    </div>
+                </form>
+            </Modal>
         </div>
     );
 };

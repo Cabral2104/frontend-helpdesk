@@ -3,6 +3,7 @@ import axios from 'axios';
 // Creamos una instancia maestra de Axios
 const api = axios.create({
     baseURL: 'http://127.0.0.1:8000/api',
+    timeout: 15000, // Previene peticiones colgadas si el servidor tarda en responder
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
